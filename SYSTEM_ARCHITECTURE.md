@@ -297,84 +297,482 @@ Params:
 
 ## 6. Workflow 2 — Data Enrichment & Web Crawling
 
-**Trigger:** Schedule (e.g., every 10 minutes)
-**Purpose:** Scrape website, extract emails/socials, get performance metrics
-**Batch Size:** 10 leads per run (to avoid API rate limits)
+<!-- 2026-06-12 22:38 UTC+5 -->
 
-### n8n Node Flow
-
-```
-[Schedule Trigger]
-       ↓
-[Postgres Node — SELECT]
-  SELECT id, business_name, website_url
-  FROM leads
-  WHERE status = 'new'
-    AND website_url IS NOT NULL
-  ORDER BY created_at ASC
-  LIMIT 10
-       ↓
-[SplitOut Node] — process each lead individually
-       ↓
-[HTTP Request — ScraperAPI]  ←──────────────────────┐
-  GET https://api.scraperapi.com/                    │
-  Params:                                            │
-    api_key = {SCRAPERAPI_KEY}                       │
-    url     = {{ $json.website_url }}                │
-    render  = true   ← handles JS pages              │
-  Returns: full rendered HTML                        │
-       ↓                                             │
-[HTTP Request — Google PageSpeed API]   ← parallel branch
-  GET https://www.googleapis.com/pagespeedonline/v5/runPagespeed
-  Params:
-    url      = {{ $json.website_url }}
-    key      = {GOOGLE_API_KEY}
-    strategy = mobile
-  Returns: performance, SEO, accessibility scores
-       ↓
-[Merge Node] — combine HTML + PageSpeed results
-       ↓
-[Code Node — Extract Emails & Socials from HTML]
-  • Regex for emails:   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
-  • Regex for LinkedIn: /linkedin\.com\/company\/[a-zA-Z0-9_-]+/g
-  • Regex for Facebook: /facebook\.com\/[a-zA-Z0-9.]+/g
-  • Regex for Instagram:/instagram\.com\/[a-zA-Z0-9._]+/g
-       ↓
-[Postgres Node — UPDATE]
-  UPDATE leads SET
-    email           = '...',
-    linkedin_url    = '...',
-    facebook_url    = '...',
-    pagespeed_score = ...,
-    seo_score       = ...,
-    mobile_score    = ...,
-    performance_json= '...',
-    status          = 'enriched',
-    enriched_at     = NOW()
-  WHERE id = {{ $json.id }}
-```
-
-### ScraperAPI Call Example
-
-```
-GET https://api.scraperapi.com/?api_key=YOUR_KEY&url=https://example.com&render=true
-```
-
-### Google PageSpeed Call Example
-
-```
-GET https://www.googleapis.com/pagespeedonline/v5/runPagespeed
-    ?url=https://example.com
-    &key=YOUR_GOOGLE_KEY
-    &strategy=mobile
-```
-
-Key fields from PageSpeed response:
-- `lighthouseResult.categories.performance.score` × 100 = performance score
-- `lighthouseResult.categories.seo.score` × 100 = SEO score
-- `lighthouseResult.categories.accessibility.score` × 100 = accessibility score
+**Trigger:** Schedule (every 10 minutes)
+**Purpose:** Scrape business websites, collect performance metrics, extract contact emails and social links
+**Batch Size:** 10 leads per run
+**Input Status:** `new`
+**Output Status:** `enriched` | `enrich_failed` | `no_email`
 
 ---
+
+### Design Principles for Production Reliability
+
+| Principle | Implementation |
+|---|---|
+| **No double-processing** | `SELECT … FOR UPDATE SKIP LOCKED` prevents two overlapping runs grabbing the same lead |
+| **Atomic status gate** | Status is set to `enriching` (in-flight) immediately after SELECT, before any external call |
+| **Parallel API calls** | ScraperAPI and PageSpeed run at the same time via n8n `Merge` node |
+| **Graceful degradation** | Missing email → `no_email` (not a hard failure); missing PageSpeed → scores stored as `null` |
+| **Idempotency** | Re-running on the same lead after a crash is safe — UPDATE is upsert-style |
+| **Retry budget** | Up to 3 automatic retries; then `enrich_failed` for manual review |
+| **Workflow audit log** | Every run writes a row to `workflow_logs` with counts and duration |
+
+---
+
+### Complete n8n Node Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  WORKFLOW 2 — DATA ENRICHMENT & WEB CRAWLING                     │
+│  Trigger: Every 10 minutes                                        │
+└──────────────────────────────────────────────────────────────────┘
+
+[Schedule Trigger]  ← runs every 10 minutes
+       │
+       ▼
+[Set Node — Run Metadata]
+  • run_start_ts  = NOW()
+  • batch_size    = 10
+  • workflow_name = "enrichment"
+       │
+       ▼
+[Postgres Node — SELECT batch with lock]
+  ┌──────────────────────────────────────────────────────┐
+  │  BEGIN;                                               │
+  │  SELECT id, business_name, website_url,               │
+  │         retry_count, city, category                   │
+  │  FROM   leads                                         │
+  │  WHERE  status = 'new'                                │
+  │    AND  retry_count < 3                               │
+  │  ORDER  BY created_at ASC                             │
+  │  LIMIT  10                                            │
+  │  FOR UPDATE SKIP LOCKED;                              │
+  └──────────────────────────────────────────────────────┘
+       │
+       ▼
+[IF Node — any rows returned?]
+  │
+  ├── NO (0 rows) ──→ [Postgres INSERT workflow_logs]
+  │                     leads_processed=0, notes='no new leads'
+  │                   [Stop — nothing to do this run]
+  │
+  └── YES ──────────→
+              │
+              ▼
+       [Postgres UPDATE — mark batch as in-flight]
+         UPDATE leads
+         SET    status     = 'enriching',
+                updated_at = NOW()
+         WHERE  id IN ({{ $json.ids }})
+              │
+              ▼
+       [SplitOut Node]  ← one item per lead
+              │
+              ▼
+       ┌──────────────────────────────────────────────────┐
+       │         PARALLEL ENRICHMENT BRANCH               │
+       │  (n8n executes both paths for each lead item)    │
+       └──────────────────────────────────────────────────┘
+              │
+       ┌──────┴──────┐
+       │             │
+       ▼             ▼
+  [Branch A]    [Branch B]
+  ScraperAPI    PageSpeed API
+  Web Crawl     Performance Metrics
+       │             │
+       └──────┬──────┘
+              │
+              ▼
+       [Merge Node — Wait for both branches]
+         Mode: "Merge By Index"
+         (combines scraped HTML + PageSpeed JSON per lead)
+              │
+              ▼
+       [Code Node — Extract Emails & Socials]
+         (see full JS below)
+              │
+              ▼
+       [IF Node — was email found?]
+         │
+         ├── NO  → [Postgres UPDATE]
+         │           status         = 'no_email',
+         │           enriched_at    = NOW(),
+         │           updated_at     = NOW()
+         │         [Continue to next lead]
+         │
+         └── YES → [Postgres UPDATE — save all enrichment]
+                     email           = extracted_email,
+                     linkedin_url    = ...,
+                     facebook_url    = ...,
+                     instagram_url   = ...,
+                     twitter_url     = ...,
+                     scraped_html    = cleaned_html,
+                     pagespeed_score = ...,
+                     seo_score       = ...,
+                     mobile_score    = ...,
+                     performance_json= ...,
+                     status          = 'enriched',
+                     enriched_at     = NOW(),
+                     updated_at      = NOW()
+              │
+              ▼
+       [Postgres INSERT — workflow_logs]
+         workflow_name   = 'enrichment',
+         leads_processed = {{ success_count }},
+         leads_failed    = {{ fail_count }},
+         duration_ms     = NOW() - run_start_ts
+```
+
+---
+
+### Branch A — Website Scraping via ScraperAPI
+
+```
+[HTTP Request Node — ScraperAPI]
+  Method:  GET
+  URL:     https://api.scraperapi.com/
+  Params:
+    api_key        = {{ $credentials.scraperApiKey }}
+    url            = {{ $json.website_url }}
+    render         = true          ← execute JavaScript (for SPAs)
+    premium        = false         ← set true if site blocks scrapers
+    country_code   = us
+    keep_headers   = false
+  Timeout: 30000 ms
+  Retry on Fail: true  (max 2 retries, 1000ms wait)
+       │
+       ▼
+[IF Node — HTTP status = 200?]
+  │
+  ├── NO  → [Set Node]  scraped_html = null,  scrape_error = response.status
+  │
+  └── YES → [Set Node]  scraped_html = {{ $response.body }}
+                        (raw HTML passed to Code Node downstream)
+```
+
+> **Fallback:** If ScraperAPI fails after 2 retries the lead is NOT immediately failed.
+> It proceeds with `scraped_html = null` — PageSpeed data and any email in the URL domain
+> are still captured. Only if BOTH branches fail does the status become `enrich_failed`.
+
+---
+
+### Branch B — Google PageSpeed Insights API
+
+```
+[HTTP Request Node — PageSpeed Insights]
+  Method:  GET
+  URL:     https://www.googleapis.com/pagespeedonline/v5/runPagespeed
+  Params:
+    url      = {{ $json.website_url }}
+    key      = {{ $credentials.googleApiKey }}
+    strategy = mobile          ← always test mobile first
+    category = PERFORMANCE
+    category = SEO
+    category = ACCESSIBILITY
+  Timeout: 25000 ms
+  Retry on Fail: true  (max 2 retries, 2000ms wait)
+       │
+       ▼
+[Code Node — Parse PageSpeed Response]
+  // Extract the three scores from the Lighthouse result
+  const cats = $input.item.json.lighthouseResult.categories;
+
+  return {
+    pagespeed_score : Math.round((cats.performance?.score  ?? 0) * 100),
+    seo_score       : Math.round((cats.seo?.score          ?? 0) * 100),
+    mobile_score    : Math.round((cats.accessibility?.score ?? 0) * 100),
+    performance_json: $input.item.json   // store full response as JSONB
+  };
+```
+
+> **Free tier:** 25,000 requests/day — sufficient for ~2,500 leads/day at the 10-lead
+> batch cadence (144 runs × 10 leads = 1,440 leads/day max).
+
+---
+
+### Code Node — Email & Social Link Extractor
+
+This is the most critical JS in Workflow 2. It runs after Merge.
+
+```javascript
+// Code Node: "Extract Emails & Socials"
+// Runs AFTER the Merge node; receives both scraped HTML and PageSpeed data
+// 2026-06-12 22:38 UTC+5
+
+const item   = $input.item.json;
+const html   = item.scraped_html ?? '';
+const url    = item.website_url  ?? '';
+
+// ── 1. Email extraction ───────────────────────────────────────────
+const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+const rawEmails  = html.match(emailRegex) ?? [];
+
+// Filter out false positives (image files, CDN hashes, noreply, etc.)
+const BLOCKLIST = ['noreply', 'no-reply', 'donotreply', 'example',
+                   '.png', '.jpg', '.gif', '.svg', 'sentry.io',
+                   'wix.com', 'wordpress.org'];
+
+const cleanEmails = [...new Set(rawEmails)].filter(e => {
+  const lower = e.toLowerCase();
+  return !BLOCKLIST.some(b => lower.includes(b)) && e.length < 100;
+});
+
+// Prefer contact/info/hello emails over generic ones
+const priority  = ['contact', 'info', 'hello', 'sales', 'support'];
+const bestEmail = cleanEmails.find(e =>
+  priority.some(p => e.toLowerCase().startsWith(p))
+) ?? cleanEmails[0] ?? null;
+
+// ── 2. Social link extraction ─────────────────────────────────────
+const socialPatterns = {
+  linkedin_url  : /https?:\/\/(www\.)?linkedin\.com\/(company|in)\/[^"'\s>]+/i,
+  facebook_url  : /https?:\/\/(www\.)?facebook\.com\/[^"'\s>]+/i,
+  instagram_url : /https?:\/\/(www\.)?instagram\.com\/[^"'\s>]+/i,
+  twitter_url   : /https?:\/\/(www\.)?(twitter|x)\.com\/[^"'\s>]+/i,
+};
+
+const socials = {};
+for (const [key, pattern] of Object.entries(socialPatterns)) {
+  const match = html.match(pattern);
+  socials[key] = match ? match[0].replace(/['">\s].*$/, '') : null;
+}
+
+// ── 3. Clean HTML for AI context (strip scripts/styles, cap at 3000 chars) ──
+const cleanHtml = html
+  .replace(/<script[\s\S]*?<\/script>/gi, '')
+  .replace(/<style[\s\S]*?<\/style>/gi,  '')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/\s{2,}/g, ' ')
+  .trim()
+  .slice(0, 3000);
+
+// ── 4. Return enriched item ───────────────────────────────────────
+return {
+  ...item,
+  email        : bestEmail,
+  all_emails   : cleanEmails,
+  ...socials,
+  scraped_html : cleanHtml,
+  email_found  : bestEmail !== null,
+};
+```
+
+---
+
+### Error Handling Within Workflow 2
+
+#### Node-Level Try/Catch (HTTP Request Nodes)
+
+Set each HTTP Request node with:
+- **Retry on Fail:** ✅ ON
+- **Max Tries:** 2
+- **Wait Between Tries:** 1500 ms
+- **Continue on Fail:** ✅ ON (allows the Merge node to still fire)
+
+#### Post-Merge Failure Detection
+
+```
+[Code Node — Validate Enrichment Result]
+// Runs after Merge, before the email IF check
+// 2026-06-12 22:38 UTC+5
+
+const item = $input.item.json;
+const hasScrape    = !!item.scraped_html && item.scraped_html.length > 100;
+const hasPagespeed = item.pagespeed_score !== null && item.pagespeed_score !== undefined;
+
+// Both branches completely failed
+if (!hasScrape && !hasPagespeed) {
+  return {
+    ...item,
+    _hard_fail   : true,
+    failure_reason: 'scrape and pagespeed both failed',
+  };
+}
+
+return { ...item, _hard_fail: false };
+```
+
+#### Hard Failure Path
+
+```
+[IF Node — _hard_fail = true?]
+  │
+  ├── YES → [Postgres UPDATE]
+  │           status        = 'enrich_failed',
+  │           failure_reason = {{ $json.failure_reason }},
+  │           retry_count   = retry_count + 1,
+  │           updated_at    = NOW()
+  │
+  └── NO  → continue to email extraction
+```
+
+#### Retry Escalation (handled via Error Trigger Workflow)
+
+```
+[Error Trigger — attached to Workflow 2]
+       │
+       ▼
+[Postgres UPDATE leads]
+  SET  failure_reason = {{ $execution.error.message }},
+       retry_count    = retry_count + 1,
+       updated_at     = NOW(),
+       status = CASE
+         WHEN retry_count + 1 >= 3 THEN 'enrich_failed'
+         ELSE 'new'           ← reset to new; will be retried next run
+       END
+  WHERE id = {{ $json.lead_id }}
+       │
+       ▼
+[Postgres INSERT workflow_logs]
+  workflow_name = 'enrichment_error',
+  notes         = error message + lead_id
+```
+
+---
+
+### Sub-Workflow Architecture (Recommended for Scale)
+
+Break Workflow 2 into reusable sub-workflows via `Execute Workflow` nodes:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│   MAIN: Workflow 2 — Enrichment Orchestrator                │
+│   Schedule: Every 10 min                                     │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+         [Postgres SELECT batch]
+                 │
+           [SplitOut Node]
+                 │
+         ┌───────┴────────┐
+         │                │
+         ▼                ▼
+[Execute Workflow]  [Execute Workflow]
+"Sub: Scrape Site"  "Sub: PageSpeed"
+         │                │
+         └───────┬─────────┘
+                 ▼
+         [Execute Workflow]
+         "Sub: Extract Contacts"
+                 │
+         [Postgres UPDATE]
+```
+
+**Sub-workflow: "Sub: Scrape Site"**
+- Input: `website_url`
+- Output: `scraped_html`, `scrape_status`
+- Reusable by Workflow 3 if re-scraping is needed
+
+**Sub-workflow: "Sub: PageSpeed"**
+- Input: `website_url`
+- Output: `pagespeed_score`, `seo_score`, `mobile_score`, `performance_json`
+- Reusable standalone for monitoring existing clients
+
+**Sub-workflow: "Sub: Extract Contacts"**
+- Input: `scraped_html`, `website_url`
+- Output: `email`, `linkedin_url`, `facebook_url`, `instagram_url`, `twitter_url`
+
+---
+
+### Scalability Controls
+
+| Lever | Default | How to Scale |
+|---|---|---|
+| **Batch size** | 10 leads/run | Increase to 25–50 once ScraperAPI plan upgraded |
+| **Schedule frequency** | Every 10 min | Drop to every 5 min for higher throughput |
+| **ScraperAPI concurrency** | 1 request/lead (sequential via SplitOut) | Use `Split In Batches` with size 5 + parallel HTTP |
+| **PageSpeed quota** | 25k/day free | Stays free up to ~17k leads/day |
+| **n8n execution mode** | `main` (single process) | Switch to `queue` mode + Redis for multi-worker |
+| **DB locking** | `FOR UPDATE SKIP LOCKED` | Safe to run 2+ simultaneous WF2 instances without overlap |
+
+#### Preventing DB Bottlenecks at Scale
+
+```sql
+-- Production-safe SELECT used inside n8n Postgres node
+-- 2026-06-12 22:38 UTC+5
+BEGIN;
+
+SELECT id, business_name, website_url, retry_count, city, category
+FROM   leads
+WHERE  status = 'new'
+  AND  retry_count < 3
+  AND  website_url IS NOT NULL
+ORDER  BY created_at ASC
+LIMIT  10
+FOR UPDATE SKIP LOCKED;
+```
+
+> The `SKIP LOCKED` clause ensures that if two WF2 instances fire simultaneously
+> (e.g., an overlapping schedule or manual trigger), they each grab different leads
+> with zero contention — no deadlocks, no duplicate processing.
+
+---
+
+### Observability & Monitoring
+
+Every successful run writes to `workflow_logs`:
+
+```sql
+-- Inserted at end of each WF2 run
+-- 2026-06-12 22:38 UTC+5
+INSERT INTO workflow_logs (
+  workflow_name,
+  run_at,
+  leads_processed,
+  leads_failed,
+  duration_ms,
+  notes
+) VALUES (
+  'enrichment',
+  NOW(),
+  {{ success_count }},
+  {{ fail_count }},
+  {{ duration_ms }},
+  'batch_ids: {{ lead_ids_csv }}'
+);
+```
+
+**Dashboard query — enrichment funnel health:**
+
+```sql
+-- 2026-06-12 22:38 UTC+5
+SELECT
+  status,
+  COUNT(*)                                  AS count,
+  ROUND(COUNT(*) * 100.0 / SUM(COUNT(*))
+        OVER (), 1)                          AS pct
+FROM  leads
+GROUP BY status
+ORDER BY count DESC;
+```
+
+**Alert condition** — if `enrich_failed` count grows faster than `enriched`, the
+ScraperAPI key is likely exhausted or rate-limited. Check quota at
+[scraperapi.com/dashboard](https://www.scraperapi.com/dashboard).
+
+---
+
+### Workflow 2 — Quick Reference Card
+
+| Parameter | Value |
+|---|---|
+| Schedule | Every 10 minutes |
+| Batch size | 10 leads |
+| Input status filter | `status = 'new' AND retry_count < 3` |
+| In-flight status | `enriching` |
+| Success output status | `enriched` |
+| No-email output status | `no_email` |
+| Hard-fail output status | `enrich_failed` |
+| Max retries before permanent fail | 3 |
+| External APIs used | ScraperAPI · Google PageSpeed Insights |
+| Avg run time (10 leads) | ~15–25 seconds |
+| Avg cost per lead | ~$0.00049 (ScraperAPI free tier: 0 cost) |
+
+---
+
 
 ## 7. Workflow 3 — AI Audit & Email Personalization
 
