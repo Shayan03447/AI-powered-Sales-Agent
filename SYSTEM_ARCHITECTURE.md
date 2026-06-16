@@ -410,11 +410,11 @@ Params:
                      instagram_url   = ...,
                      twitter_url     = ...,
                      scraped_html    = cleaned_html,
-                     pagespeed_score = ...,
-                     seo_score       = ...,
-                     mobile_score    = ...,
+    pagespeed_score = ...,
+    seo_score       = ...,
+    mobile_score    = ...,
                      performance_json= ...,
-                     status          = 'enriched',
+    status          = 'enriched',
                      enriched_at     = NOW(),
                      updated_at      = NOW()
               │

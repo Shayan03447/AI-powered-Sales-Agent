@@ -1,0 +1,414 @@
+{
+  "name": "PD — Lead Generation & Data Storage",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "3fb1ee58-f68a-4050-97ba-9e2aaf8841c5",
+        "formTitle": "Lead Generation Search",
+        "formDescription": "Enter your search criteria to find new business leads.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Business Type",
+              "placeholder": "e.g. real estate agency, plumber, dentist",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "City",
+              "placeholder": "e.g. Melbourne, Sydney, Brisbane",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Country",
+              "placeholder": "AU"
+            },
+            {
+              "fieldLabel": "Source",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "yelp"
+                  },
+                  {
+                    "option": "gmb"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Max Results",
+              "fieldType": "number",
+              "placeholder": "50"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "62d66f63-b486-4a43-ba6c-5df1f2900791",
+      "name": "Form Trigger — Search Input",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        -1392,
+        16
+      ],
+      "webhookId": "3fb1ee58-f68a-4050-97ba-9e2aaf8841c5"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assign-keyword",
+              "name": "keyword",
+              "value": "={{ $json['Business Type'] }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-city",
+              "name": "city",
+              "value": "={{ $json['City'] }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-country",
+              "name": "country",
+              "value": "={{ $json['Country'] || 'AU' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-location",
+              "name": "location",
+              "value": "={{ $json['City'] }}, {{ $json['Country'] || 'AU' }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-source",
+              "name": "source",
+              "value": "={{ $json['Source'] }}",
+              "type": "string"
+            },
+            {
+              "id": "assign-limit",
+              "name": "limit",
+              "value": "={{ $json['Max Results'] || 50 }}",
+              "type": "number"
+            },
+            {
+              "id": "assign-offset",
+              "name": "offset",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "assign-search-query",
+              "name": "search_query",
+              "value": "={{ $json['Business Type'] }} in {{ $json['City'] }}, {{ $json['Country'] || 'AU' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c8a9312b-cc02-49df-a7fc-b0d7fd61143c",
+      "name": "Set Search Parameters",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [
+        -1168,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-source",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "yelp",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a0e3dabd-c957-464a-8af2-e73350f89015",
+      "name": "IF — Yelp or GMB?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.yelp.com/v3/businesses/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "term",
+              "value": "={{ $('Set Search Parameters').item.json.keyword }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $('Set Search Parameters').item.json.location }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $('Set Search Parameters').item.json.limit }}"
+            },
+            {
+              "name": "offset",
+              "value": "={{ $('Set Search Parameters').item.json.offset }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.YELP_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c01d92bc-fedd-4494-b6da-795ba8716e03",
+      "name": "Yelp API — Search Businesses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -736,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": 
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"searchStringsArray\": [\n   \"{{ $('Set Search Parameters').item.json.keyword }} in {{ $('Set Search Parameters').item.json.location }}\"\n  ],\n  \"maxCrawledPlacesPerSearch\": 1,\n  \"includeReviews\":false,\n  \"includeImage\":false,\n  \"exportPlaceUrls\":false,\n  \"subTitle\":false\n\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "4dc02d38-d2d0-4044-83e3-ec38551fb009",
+      "name": "GMB — Google Places Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -736,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO leads (\n  external_id,\n  business_name,\n  phone,\n  address,\n  city,\n  state,\n  country,\n  website_url,\n  category,\n  source,\n  status,\n  rating,\n  review_count,\n  search_query,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ $json.external_id }}',\n  '{{ $json.business_name.replace(/'/g, \"''\") }}',\n  '{{ $json.phone }}',\n  '{{ $json.address.replace(/'/g, \"''\") }}',\n  '{{ $json.city }}',\n  '{{ $json.state }}',\n  '{{ $json.country }}',\n  '{{ $json.website_url }}',\n  '{{ $json.category }}',\n  '{{ $json.source }}',\n  '{{ $json.status }}',\n  {{ $json.rating ?? 'NULL' }},\n  {{ $json.review_count ?? 'NULL' }},\n  '{{ $json.search_query.replace(/'/g, \"''\") }}',\n  NOW(),\n  NOW()\n) ON CONFLICT (external_id) DO NOTHING;",
+        "options": {}
+      },
+      "id": "8dca9d1f-be5a-4f8b-9496-5dded4ebaa9b",
+      "name": "Postgres — Check Duplicate (Yelp)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        -192,
+        -112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "nY87kKchmNtbPoK2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO leads (\n  external_id,\n  business_name,\n  phone,\n  address,\n  city,\n  state,\n  country,\n  website_url,\n  category,\n  source,\n  status,\n  rating,\n  review_count,\n  search_query,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ $json.external_id }}',\n  '{{ $json.business_name.replace(/'/g, \"''\") }}',\n  '{{ $json.phone }}',\n  '{{ $json.address.replace(/'/g, \"''\") }}',\n  '{{ $json.city }}',\n  '{{ $json.state }}',\n  '{{ $json.country }}',\n  '{{ $json.website_url }}',\n  '{{ $json.category }}',\n  '{{ $json.source }}',\n  '{{ $json.status }}',\n  {{ $json.rating ?? 'NULL' }},\n  {{ $json.review_count ?? 'NULL' }},\n  '{{ $json.search_query.replace(/'/g, \"''\") }}',\n  NOW(),\n  NOW()\n) ON CONFLICT (external_id) DO NOTHING;\n",
+        "options": {}
+      },
+      "id": "c4dad892-d62d-4b22-914e-4a81cf7ab813",
+      "name": "Postgres — Check Duplicate (GMB)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        144
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "nY87kKchmNtbPoK2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\n\n// Handle all Apify response structures\nlet businesses;\nif (Array.isArray(raw)) {\n  businesses = raw;\n} else if (Array.isArray(raw.items)) {\n  businesses = raw.items;\n} else {\n  businesses = [raw];\n}\n\n// Split + Normalize in one step\nreturn businesses.map(business => ({\n  json: {\n    // Identity\n    external_id:   business.placeId || business.phoneUnformatted || '',\n    source:        'gmb',\n\n    // Core business info\n    business_name: business.title || '',\n    category:      business.categoryName || '',\n    phone:         business.phone || '',\n    address:       business.street || business.address || '',\n    city:          business.city || '',\n    state:         business.state || '',\n    country:       business.countryCode || 'AU',\n    website_url:   business.website || '',\n\n    // Performance (may be null — filled by WF2 later)\n    rating:        business.totalScore || null,\n    review_count:  business.reviewsCount || null,\n\n    // Pipeline\n    status:        'new',\n    search_query:  `${business.categoryName || ''} in ${business.city || ''}`\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        -112
+      ],
+      "id": "25a6bd2d-6332-4a8c-a4ba-b079dbfc06f6",
+      "name": "Normalize"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\n\n// Handle all Apify response structures\nlet businesses;\nif (Array.isArray(raw)) {\n  businesses = raw;\n} else if (Array.isArray(raw.items)) {\n  businesses = raw.items;\n} else {\n  businesses = [raw];\n}\n\n// Split + Normalize in one step\nreturn businesses.map(business => ({\n  json: {\n    // Identity\n    external_id:   business.placeId || business.phoneUnformatted || '',\n    source:        'gmb',\n\n    // Core business info\n    business_name: business.title || '',\n    category:      business.categoryName || '',\n    phone:         business.phone || '',\n    address:       business.street || business.address || '',\n    city:          business.city || '',\n    state:         business.state || '',\n    country:       business.countryCode || 'AU',\n    website_url:   business.website || '',\n\n    // Performance (may be null — filled by WF2 later)\n    rating:        business.totalScore || null,\n    review_count:  business.reviewsCount || null,\n\n    // Pipeline\n    status:        'new',\n    search_query:  `${business.categoryName || ''} in ${business.city || ''}`\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        144
+      ],
+      "id": "842308d0-9c68-4a1e-8aec-d4231cf8fdce",
+      "name": "Normalize1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Form Trigger — Search Input": {
+      "main": [
+        [
+          {
+            "node": "Set Search Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Search Parameters": {
+      "main": [
+        [
+          {
+            "node": "IF — Yelp or GMB?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Yelp or GMB?": {
+      "main": [
+        [
+          {
+            "node": "Yelp API — Search Businesses",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GMB — Google Places Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yelp API — Search Businesses": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GMB — Google Places Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Check Duplicate (Yelp)": {
+      "main": [
+        []
+      ]
+    },
+    "Postgres — Check Duplicate (GMB)": {
+      "main": [
+        []
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Check Duplicate (Yelp)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize1": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Check Duplicate (GMB)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "72a0718e-1326-4c38-a1fc-1e7757b4d41c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "933ee548882e2bf7f6061bb633a848971fa7d2effc1105936df88a0b977476f1"
+  },
+  "id": "KJVsrNNvcN5ICJU1",
+  "tags": []
+}
