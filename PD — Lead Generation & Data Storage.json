@@ -202,31 +202,13 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "token",
-              "value": 
-            }
-          ]
-        },
-        "sendHeaders": true,
-        "specifyHeaders": "json",
-        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"searchStringsArray\": [\n   \"{{ $('Set Search Parameters').item.json.keyword }} in {{ $('Set Search Parameters').item.json.location }}\"\n  ],\n  \"maxCrawledPlacesPerSearch\": 1,\n  \"includeReviews\":false,\n  \"includeImage\":false,\n  \"exportPlaceUrls\":false,\n  \"subTitle\":false\n\n}",
-        "options": {
-          "timeout": 120000
-        }
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Apify async: start run → poll status → fetch dataset — 2026-06-19 UTC+5\nconst cfg = $('Set Search Parameters').first().json;\nconst token = $env.APIFY_TOKEN;\nconst http = this.helpers.httpRequest;\n\nif (!token) throw new Error('APIFY_TOKEN env var missing');\n\nconst input = {\n  searchStringsArray: [`${cfg.keyword} in ${cfg.location}`],\n  maxCrawledPlacesPerSearch: Number(cfg.limit) || 50,\n  includeReviews: false,\n  includeImage: false,\n  exportPlaceUrls: false,\n  subTitle: false\n};\n\n// Step 1: Start run (waitForFinish=0 = return immediately)\nconst startRes = await http({\n  method: 'POST',\n  url: `https://api.apify.com/v2/acts/compass~crawler-google-places/runs?token=${encodeURIComponent(token)}&waitForFinish=0`,\n  headers: { 'Content-Type': 'application/json' },\n  body: input,\n  json: true\n});\n\nconst runId = startRes.data?.id;\nif (!runId) throw new Error('Apify did not return a run id');\n\n// Step 2: Poll until complete (max 15 min)\nconst MAX_WAIT_MS = 15 * 60 * 1000;\nconst POLL_MS = 10000;\nconst t0 = Date.now();\n\nlet run = startRes.data;\nconst terminal = ['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'];\n\nwhile (!terminal.includes(run.status)) {\n  if (Date.now() - t0 > MAX_WAIT_MS) {\n    throw new Error(`Apify run ${runId} timed out after 15 minutes (status: ${run.status})`);\n  }\n  await new Promise(r => setTimeout(r, POLL_MS));\n\n  const statusRes = await http({\n    method: 'GET',\n    url: `https://api.apify.com/v2/actor-runs/${runId}?token=${encodeURIComponent(token)}`,\n    json: true\n  });\n  run = statusRes.data || statusRes;\n}\n\nif (run.status !== 'SUCCEEDED') {\n  throw new Error(`Apify run ${run.status}: ${run.statusMessage || 'unknown error'}`);\n}\n\n// Step 3: Fetch dataset items\nconst datasetId = run.defaultDatasetId;\nconst items = await http({\n  method: 'GET',\n  url: `https://api.apify.com/v2/datasets/${datasetId}/items?token=${encodeURIComponent(token)}`,\n  json: true\n});\n\nconst businesses = Array.isArray(items) ? items : (items?.items || []);\n\nreturn [{ json: { items: businesses, runId, count: businesses.length } }];"
       },
       "id": "4dc02d38-d2d0-4044-83e3-ec38551fb009",
-      "name": "GMB — Google Places Search",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "GMB — Apify Async Crawl",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         -736,
         144
