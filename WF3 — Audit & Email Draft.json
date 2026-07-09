@@ -1,0 +1,614 @@
+{
+  "name": "WF3 — Audit & Email Draft",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "11111111-1111-1111-1111-111111111101",
+      "name": "Schedule Trigger — Every 10 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-2000, 480]
+    },
+    {
+      "parameters": {},
+      "id": "11111111-1111-1111-1111-111111111102",
+      "name": "Manual Trigger (Test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-2000, 640]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-batch",
+              "name": "batchSize",
+              "type": "number",
+              "value": 5
+            },
+            {
+              "id": "cfg-model",
+              "name": "openaiModel",
+              "type": "string",
+              "value": "gpt-4o-mini"
+            },
+            {
+              "id": "cfg-retries",
+              "name": "maxRetries",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "cfg-agency",
+              "name": "agencyName",
+              "type": "string",
+              "value": "={{ $env.AGENCY_NAME || 'Atrium Solution' }}"
+            },
+            {
+              "id": "cfg-calendar",
+              "name": "calendarLink",
+              "type": "string",
+              "value": "={{ $env.CALENDAR_LINK || 'https://calendly.com/atrium-solution' }}"
+            },
+            {
+              "id": "cfg-workflow",
+              "name": "workflowName",
+              "type": "string",
+              "value": "audit_and_draft"
+            },
+            {
+              "id": "cfg-start",
+              "name": "runStartTs",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "22222222-2222-2222-2222-222222222201",
+      "name": "config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1760, 560]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH recovered AS (\n  UPDATE leads\n  SET\n    status     = 'enriched',\n    updated_at = NOW()\n  WHERE status = 'auditing'\n    AND updated_at < NOW() - INTERVAL '20 minutes'\n  RETURNING id\n)\nSELECT COUNT(*) AS stuck_leads_recovered FROM recovered;",
+        "options": {}
+      },
+      "id": "33333333-3333-3333-3333-333333333301",
+      "name": "Postgres — Recover Stuck Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-1520, 560],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH picked AS (\n  SELECT id\n  FROM leads\n  WHERE status = 'enriched'\n    AND email IS NOT NULL\n    AND TRIM(email) <> ''\n  ORDER BY created_at ASC\n  LIMIT {{ $('config').first().json.batchSize }}\n  FOR UPDATE SKIP LOCKED\n)\nUPDATE leads l\nSET\n  status     = 'auditing',\n  updated_at = NOW()\nFROM picked\nWHERE l.id = picked.id\nRETURNING\n  l.id,\n  l.business_name,\n  l.category,\n  l.city,\n  COALESCE(l.state, '') AS state,\n  COALESCE(l.country, 'US') AS country,\n  l.website_url,\n  COALESCE(l.email, '') AS email,\n  COALESCE(l.facebook_url, '') AS facebook_url,\n  COALESCE(l.instagram_url, '') AS instagram_url,\n  l.rating,\n  l.review_count,\n  l.campaign_id;",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444401",
+      "name": "Postgres — Fetch & Lock Enriched Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-1280, 560],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-id",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "55555555-5555-5555-5555-555555555501",
+      "name": "IF — Has Leads",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1040, 560]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n) VALUES (\n  'audit_and_draft',\n  NOW(),\n  0,\n  0,\n  0,\n  'no enriched leads with email in queue'\n);",
+        "options": {}
+      },
+      "id": "66666666-6666-6666-6666-666666666601",
+      "name": "Postgres — Log Empty Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-800, 720],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "33333333-3333-3333-3333-333333333303",
+      "name": "Split in Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-800, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.website_url }}"
+            },
+            {
+              "name": "strategy",
+              "value": "mobile"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            },
+            {
+              "name": "category",
+              "value": "seo"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "55555555-5555-5555-5555-555555555505",
+      "name": "HTTP — PageSpeed Mobile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-560, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $('Split in Batches').item.json.website_url }}"
+            },
+            {
+              "name": "strategy",
+              "value": "desktop"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            },
+            {
+              "name": "key",
+              "value": "={{ $env.GOOGLE_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "66666666-6666-6666-6666-666666666606",
+      "name": "HTTP — PageSpeed Desktop",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $('Split in Batches').item.json;\nconst scraperApiKey = $env.SCRAPER_API_KEY;\n\nconst scrape = async (targetUrl) => {\n  if (!targetUrl || !targetUrl.trim()) return '';\n  try {\n    const res = await this.helpers.httpRequest({\n      method: 'GET',\n      url: 'https://api.scraperapi.com/?api_key=' + encodeURIComponent(scraperApiKey) + '&render=false&url=' + encodeURIComponent(targetUrl),\n      timeout: 30000\n    });\n    return typeof res === 'string' ? res : (res.body || String(res) || '');\n  } catch (_e) {\n    return '';\n  }\n};\n\nconst [fbHtml, igHtml] = await Promise.all([\n  lead.facebook_url  ? scrape(lead.facebook_url)  : Promise.resolve(''),\n  lead.instagram_url ? scrape(lead.instagram_url) : Promise.resolve('')\n]);\n\nreturn [{\n  json: {\n    ...lead,\n    fb_html: fbHtml,\n    ig_html: igHtml\n  }\n}];"
+      },
+      "id": "77777777-7777-7777-7777-777777777701",
+      "name": "Code — Scrape Social",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $json;\nconst cfg = $('config').first().json;\nconst apiKey = $env.OPENAI_API_KEY;\nconst agencyName = cfg.agencyName || 'Atrium Solution';\nconst calendarLink = cfg.calendarLink || 'https://calendly.com/atrium-solution';\nconst model = cfg.openaiModel || 'gpt-4o-mini';\n\nfunction safeParsePS(resp) {\n  if (!resp || resp.error || !resp.lighthouseResult) return null;\n  const lr = resp.lighthouseResult;\n  return {\n    performance: lr.categories?.performance?.score != null\n      ? Math.round(lr.categories.performance.score * 100) : null,\n    seo: lr.categories?.seo?.score != null\n      ? Math.round(lr.categories.seo.score * 100) : null,\n    audits: lr.audits || {}\n  };\n}\n\nconst mobile = safeParsePS($('HTTP \u2014 PageSpeed Mobile').item.json);\nconst desktop = safeParsePS($('HTTP \u2014 PageSpeed Desktop').item.json);\n\nconst websitePP = [];\nconst mobileScore = mobile?.performance ?? null;\n\nif (mobileScore !== null) {\n  if (mobileScore < 50) {\n    websitePP.push({ area: 'performance', problem: `Mobile speed score is ${mobileScore}/100 \u2014 site loads very slowly on phones, causing visitors to leave`, solution: 'Mobile speed optimization, image compression, lazy loading, and caching setup', severity: 'high' });\n  } else if (mobileScore < 80) {\n    websitePP.push({ area: 'performance', problem: `Mobile speed score is ${mobileScore}/100 \u2014 noticeable delays for mobile users`, solution: 'Core Web Vitals improvements and performance optimization', severity: 'medium' });\n  }\n} else {\n  websitePP.push({ area: 'performance', problem: 'Website performance could not be measured \u2014 possible technical issues or very slow response', solution: 'Website technical audit, hosting review, and performance baseline setup', severity: 'medium' });\n}\n\nconst desktopScore = desktop?.performance ?? null;\nif (desktopScore !== null && desktopScore < 70) {\n  websitePP.push({ area: 'performance', problem: `Desktop speed score is ${desktopScore}/100 \u2014 below the 70+ industry standard`, solution: 'Desktop performance optimization and server-side improvements', severity: 'medium' });\n}\n\nconst seoScore = mobile?.seo ?? null;\nif (seoScore !== null && seoScore < 80) {\n  websitePP.push({ area: 'seo', problem: `SEO score is ${seoScore}/100 \u2014 website is harder to find on Google`, solution: 'On-page SEO optimization, meta tags, and content structure improvements', severity: seoScore < 60 ? 'high' : 'medium' });\n}\n\nconst audits = mobile?.audits || {};\nif (audits['meta-description']?.score === 0) websitePP.push({ area: 'seo', problem: 'Missing meta description \u2014 Google shows no meaningful summary in search results', solution: 'Write compelling meta descriptions for all key pages', severity: 'medium' });\nif (audits['document-title']?.score === 0) websitePP.push({ area: 'seo', problem: 'Missing or generic page title \u2014 reduces click-through rate from Google', solution: 'Optimize page titles with relevant keywords and business name', severity: 'medium' });\nif (audits['tap-targets']?.score === 0) websitePP.push({ area: 'ux', problem: 'Buttons and links too small on mobile \u2014 frustrating for customers on phones', solution: 'Mobile UX redesign with properly sized tap targets and spacing', severity: 'medium' });\nif (audits['uses-https']?.score === 0) websitePP.push({ area: 'security', problem: 'Website not using HTTPS \u2014 browsers show a Not Secure warning to every visitor', solution: 'Install SSL certificate and enforce HTTPS across entire site', severity: 'high' });\nif (audits['image-alt']?.score === 0) websitePP.push({ area: 'seo', problem: 'Images missing alt text \u2014 hurts both SEO rankings and accessibility compliance', solution: 'Add descriptive alt text to all website images', severity: 'low' });\n\nconst socialPP = [];\nconst fbHtml = (lead.fb_html || '').toLowerCase();\nconst igHtml = (lead.ig_html || '').toLowerCase();\nconst hasFB = !!(lead.facebook_url && lead.facebook_url.trim());\nconst hasIG = !!(lead.instagram_url && lead.instagram_url.trim());\n\nif (hasFB) {\n  if (!fbHtml || fbHtml.length < 300 || fbHtml.includes('you must log in') || fbHtml.includes('log into facebook')) {\n    socialPP.push({ platform: 'facebook', problem: 'Facebook page is private or inaccessible to the public \u2014 potential customers cannot find it', solution: 'Set up a public Facebook Business page with full info and regular updates', severity: 'medium' });\n  } else {\n    const recentKW = ['just now', 'minutes ago', 'hour', 'yesterday', 'days ago'];\n    if (!recentKW.some(k => fbHtml.includes(k))) {\n      socialPP.push({ platform: 'facebook', problem: 'Facebook page appears inactive \u2014 no recent posts detected, reducing trust and reach', solution: 'Consistent posting strategy and social media content calendar', severity: 'medium' });\n    }\n  }\n} else {\n  socialPP.push({ platform: 'facebook', problem: 'No Facebook Business page linked on the website \u2014 missing a key customer engagement channel', solution: 'Create and promote a Facebook Business page with regular updates and customer reviews', severity: 'medium' });\n}\n\nif (hasIG) {\n  if (!igHtml || igHtml.length < 300 || igHtml.includes('log in') || igHtml.includes('this page isn')) {\n    socialPP.push({ platform: 'instagram', problem: 'Instagram profile is private or inaccessible to the public', solution: 'Set up a public Instagram Business profile with consistent branding and content', severity: 'medium' });\n  } else if (!igHtml.includes('posts') && !igHtml.includes('followers')) {\n    socialPP.push({ platform: 'instagram', problem: 'Instagram profile appears thin or inactive \u2014 limited social proof for potential customers', solution: 'Build Instagram presence with regular posts and engagement strategy', severity: 'medium' });\n  }\n} else {\n  socialPP.push({ platform: 'instagram', problem: 'No Instagram profile linked on website \u2014 missing visual marketing and younger audience reach', solution: 'Create Instagram Business account showcasing work, reviews, and behind-the-scenes content', severity: 'low' });\n}\n\nconst allPP = [...websitePP, ...socialPP];\nconst ppText = allPP.map((p, i) =>\n  `${i + 1}. [${(p.area || p.platform).toUpperCase()} | ${p.severity.toUpperCase()}] ${p.problem}\\n   Fix: ${p.solution}`\n).join('\\n');\n\nconst systemPrompt = `You are a senior digital marketing consultant writing personalized cold outreach emails for ${agencyName}. Your job is to show the business owner you did real homework on their website and social media \u2014 then offer specific solutions.\\n\\nStrict rules:\\n- Tone: professional, empathetic, consultative \u2014 NOT salesy or pushy\\n- Reference SPECIFIC numbers and issues from the audit data\\n- Structure: brief intro (1 sentence) \u2192 2-3 specific problems found \u2192 how we help \u2192 soft CTA\\n- Subject line: under 60 characters, no spam words, creates curiosity\\n- Body: under 250 words total\\n- Close with: Book a free 15-minute strategy call: ${calendarLink}\\n- Sign off: The ${agencyName} Team\\n\\nOutput format \u2014 use EXACTLY this structure with nothing before or after:\\nSUBJECT: <subject line here>\\nBODY:\\n<full email body here>`;\n\nconst userPrompt = `Write a cold outreach email for this business:\\n\\nBusiness Name: ${lead.business_name}\\nIndustry: ${lead.category}\\nLocation: ${lead.city}${lead.state ? ', ' + lead.state : ''}\\nWebsite: ${lead.website_url}\\nGoogle Rating: ${lead.rating ? lead.rating + '/5 (' + lead.review_count + ' reviews)' : 'Not available'}\\n\\nAudit Findings:\\n${ppText}\\n\\nWrite the personalized outreach email now.`;\n\nlet auditSuccess = false;\nlet emailSubject = null;\nlet emailBody = null;\nlet failureReason = null;\n\nif (!apiKey) {\n  failureReason = 'missing OPENAI_API_KEY env var';\n} else {\n  const http = this.helpers.httpRequest;\n  let lastErr = 'unknown OpenAI error';\n  for (let attempt = 1; attempt <= 2; attempt++) {\n    try {\n      const res = await http({\n        method: 'POST',\n        url: 'https://api.openai.com/v1/chat/completions',\n        headers: {\n          Authorization: 'Bearer ' + apiKey,\n          'Content-Type': 'application/json'\n        },\n        body: {\n          model,\n          messages: [\n            { role: 'system', content: systemPrompt },\n            { role: 'user', content: userPrompt }\n          ],\n          max_tokens: 700,\n          temperature: 0.7\n        },\n        json: true,\n        timeout: 60000\n      });\n\n      const content = (res?.choices?.[0]?.message?.content || '').trim();\n      if (content.length >= 50) {\n        const subjectMatch = content.match(/^SUBJECT:\\s*(.+?)$/m);\n        const bodyMatch = content.match(/^BODY:\\s*([\\s\\S]+)$/m);\n        emailSubject = subjectMatch\n          ? subjectMatch[1].trim()\n          : 'Improve ' + lead.business_name + \"'s Online Presence\";\n        emailBody = bodyMatch\n          ? bodyMatch[1].trim()\n          : content.replace(/^SUBJECT:.+$/m, '').trim();\n        if (emailBody && emailBody.length >= 50) {\n          auditSuccess = true;\n          break;\n        }\n        lastErr = 'could not parse email body from AI response';\n      } else {\n        lastErr = res?.error?.message || 'AI returned empty response';\n      }\n    } catch (e) {\n      lastErr = e.message || 'OpenAI HTTP request failed';\n      if (attempt < 2) await new Promise(r => setTimeout(r, 3000));\n    }\n  }\n  if (!auditSuccess) failureReason = lastErr;\n}\n\nreturn [{\n  json: {\n    id: lead.id,\n    business_name: lead.business_name,\n    email: lead.email,\n    website_url: lead.website_url,\n    city: lead.city,\n    state: lead.state,\n    category: lead.category,\n    rating: lead.rating,\n    review_count: lead.review_count,\n    campaign_id: lead.campaign_id,\n    pagespeed_mobile: mobileScore,\n    pagespeed_desktop: desktopScore,\n    seo_score: seoScore,\n    website_pain_points: websitePP,\n    social_pain_points: socialPP,\n    pain_points_count: allPP.length,\n    audit_success: auditSuccess,\n    email_subject: emailSubject,\n    email_body: emailBody,\n    failure_reason: failureReason\n  }\n}];"
+      },
+      "id": "88888888-8888-8888-8888-888888888801",
+      "name": "Code — Compile Audit & Call AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.audit_success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "id": "audit-success-check-wf3"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "name": "IF — Audit Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO email_drafts (\n  lead_id,\n  subject,\n  body,\n  status,\n  created_at\n) VALUES (\n  {{ $json.id }},\n  '{{ $json.email_subject.replace(/'/g, \"''\") }}',\n  '{{ $json.email_body.replace(/'/g, \"''\") }}',\n  'draft',\n  NOW()\n)\nRETURNING id AS draft_id;",
+        "options": {}
+      },
+      "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "name": "Postgres — Insert Email Draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [640, 240],
+      "continueOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads SET\n  status               = 'pending_review',\n  pagespeed_mobile     = {{ $('Code \u2014 Compile Audit & Call AI').item.json.pagespeed_mobile !== null ? $('Code \u2014 Compile Audit & Call AI').item.json.pagespeed_mobile : 'NULL' }},\n  pagespeed_desktop    = {{ $('Code \u2014 Compile Audit & Call AI').item.json.pagespeed_desktop !== null ? $('Code \u2014 Compile Audit & Call AI').item.json.pagespeed_desktop : 'NULL' }},\n  seo_score            = {{ $('Code \u2014 Compile Audit & Call AI').item.json.seo_score !== null ? $('Code \u2014 Compile Audit & Call AI').item.json.seo_score : 'NULL' }},\n  website_pain_points  = '{{ JSON.stringify($('Code \u2014 Compile Audit & Call AI').item.json.website_pain_points || []).replace(/'/g, \"''\") }}'::jsonb,\n  social_pain_points   = '{{ JSON.stringify($('Code \u2014 Compile Audit & Call AI').item.json.social_pain_points || []).replace(/'/g, \"''\") }}'::jsonb,\n  failure_reason       = NULL,\n  audited_at           = NOW(),\n  updated_at           = NOW()\nWHERE id = {{ $('Code \u2014 Compile Audit & Call AI').item.json.id }};",
+        "options": {}
+      },
+      "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      "name": "Postgres — Update pending_review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [880, 240],
+      "continueOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads SET\n  retry_count    = retry_count + 1,\n  failure_reason = '{{ ($json.failure_reason || \"Audit or email generation failed\").replace(/'/g, \"''\") }}',\n  status         = CASE\n                     WHEN retry_count + 1 >= {{ $('config').first().json.maxRetries }}\n                     THEN 'audit_failed'\n                     ELSE 'enriched'\n                   END,\n  updated_at     = NOW()\nWHERE id = {{ $json.id }};",
+        "options": {}
+      },
+      "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      "name": "Postgres — Update audit_failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [640, 560],
+      "continueOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('config').first().json;\nconst start = new Date(cfg.runStartTs).getTime();\nconst durationMs = Number.isFinite(start) ? Date.now() - start : 0;\n\nreturn [{\n  json: {\n    workflow_name: 'audit_and_draft',\n    run_start_ts: cfg.runStartTs,\n    duration_ms: durationMs,\n    notes: 'WF3 audit_and_draft batch completed at ' + new Date().toISOString()\n  }\n}];",
+        "executeOnce": true
+      },
+      "id": "12345678-1234-1234-1234-123456789abc",
+      "name": "Code — Summarize Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 640],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n)\nSELECT\n  'audit_and_draft',\n  NOW(),\n  COUNT(*) FILTER (WHERE status = 'pending_review' AND updated_at >= '{{ $json.run_start_ts }}'::timestamptz),\n  COUNT(*) FILTER (WHERE status = 'audit_failed'   AND updated_at >= '{{ $json.run_start_ts }}'::timestamptz),\n  {{ $json.duration_ms }},\n  '{{ $json.notes.replace(/'/g, \"''\") }}'\nFROM leads;",
+        "options": {}
+      },
+      "id": "abcdef12-abcd-abcd-abcd-abcdef123456",
+      "name": "Postgres — Workflow Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [640, 640],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger — Every 10 min": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Test)": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "config": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Recover Stuck Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Recover Stuck Leads": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Fetch & Lock Enriched Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Fetch & Lock Enriched Leads": {
+      "main": [
+        [
+          {
+            "node": "IF — Has Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Has Leads": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Log Empty Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split in Batches": {
+      "main": [
+        [
+          {
+            "node": "HTTP — PageSpeed Mobile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code — Summarize Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — PageSpeed Mobile": {
+      "main": [
+        [
+          {
+            "node": "HTTP — PageSpeed Desktop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP — PageSpeed Desktop": {
+      "main": [
+        [
+          {
+            "node": "Code — Scrape Social",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Scrape Social": {
+      "main": [
+        [
+          {
+            "node": "Code — Compile Audit & Call AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Compile Audit & Call AI": {
+      "main": [
+        [
+          {
+            "node": "IF — Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Audit Success": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Insert Email Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Update audit_failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Insert Email Draft": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Update pending_review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Update pending_review": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Update audit_failed": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Summarize Run": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Workflow Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "wf3-audit-draft-v2-atrium-2026",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"
+  },
+  "nodeGroups": [],
+  "id": "",
+  "tags": []
+}

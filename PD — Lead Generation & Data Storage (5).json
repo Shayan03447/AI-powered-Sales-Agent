@@ -1,0 +1,713 @@
+{
+  "name": "PD — Lead Generation & Data Storage",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst seen = new Map();\n\nfor (const item of items) {\n  const name = (item.json.business_name || '').toLowerCase().trim();\n  const city = (item.json.city || '').toLowerCase().trim();\n  const key = `${name}||${city}`;\n\n  if (!seen.has(key)) {\n    seen.set(key, item);\n  } else {\n    // Prefer GMB record over Yelp — GMB includes website_url\n    const existing = seen.get(key);\n    if (item.json.source === 'gmb' && existing.json.source !== 'gmb') {\n      seen.set(key, item);\n    }\n  }\n}\n\nreturn Array.from(seen.values());"
+      },
+      "id": "fb80afd4-7d53-4046-bcd1-d875b6855ffd",
+      "name": "Code — Deduplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 2,
+        "options": {}
+      },
+      "id": "0fbf3323-4e14-4430-91f4-b612581cc353",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        112,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE campaigns\nSET\n  status = 'error',\n  completed_at = NOW(),\n  error_reason = 'WF1 execution failed — check n8n execution log for details'\nWHERE id = {{ $('Postgres — Create Campaign').first().json.id }};",
+        "options": {}
+      },
+      "id": "a3e9314f-2e24-43e8-b48b-7b9a68bf482e",
+      "name": "Postgres — Mark Campaign Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "executeOnce": true,
+      "position": [
+        16,
+        1968
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "Lead Generation Search",
+        "formDescription": "Enter your search criteria to find new business leads.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Business Type",
+              "placeholder": "e.g. real estate agency, plumber, dentist",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "City",
+              "placeholder": "e.g. Melbourne, Sydney, Brisbane",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Country",
+              "placeholder": "US, AU"
+            },
+            {
+              "fieldLabel": "Source",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "yelp"
+                  },
+                  {
+                    "option": "gmb"
+                  },
+                  {
+                    "option": "both"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Max Results",
+              "fieldType": "number",
+              "placeholder": "50"
+            }
+          ]
+        },
+        "options": {
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Campaign started. Leads will be saved with status new or no_website. Check n8n execution for details."
+            }
+          }
+        }
+      },
+      "id": "bb09ff23-b970-4779-b8a7-1404fcff4052",
+      "name": "Form Trigger — Search Input1",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -2000,
+        1776
+      ],
+      "webhookId": "d9e4ac89-60a0-4cdb-a508-85a81ced89f4"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO campaigns (keyword, city, country, source, max_results, search_query, status)\nVALUES (\n  '{{ ($json.keyword || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.city || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.country || \"\").substring(0, 10).replace(/'/g, \"''\") }}',\n  '{{ ($json.source || \"\").substring(0, 20).replace(/'/g, \"''\") }}',\n  {{ $json.limit }},\n  '{{ ($json.search_query || \"\").replace(/'/g, \"''\") }}',\n  'running'\n)\nRETURNING id;",
+        "options": {}
+      },
+      "id": "ae546041-93a2-4c1b-92cd-935d54dd88e8",
+      "name": "Postgres — Create Campaign1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1552,
+        1776
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Set Search Parameters1').first().json;\nconst campaignId = $('Postgres — Create Campaign1').first().json.id;\nconst sources = cfg.source === 'both' ? ['yelp', 'gmb'] : [cfg.source];\n\nreturn sources.map((active_source) => ({\n  json: {\n    ...cfg,\n    campaign_id: campaignId,\n    active_source,\n  },\n}));"
+      },
+      "id": "03b6a275-9323-41be-b7ba-1d7db430220c",
+      "name": "Code — Expand Sources1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1328,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.active_source }}",
+                    "rightValue": "yelp",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "3c7b4fc6-3d96-42a8-b239-9caef5ad2631"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "yelp"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.active_source }}",
+                    "rightValue": "gmb",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cf98635b-4ddc-4774-af35-7fdf21f81ca4"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "gmb"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "86f4b539-07c4-4a6c-a12a-42ce92ec151f",
+      "name": "Switch — Source1",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1104,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.yelp.com/v3/businesses/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "term",
+              "value": "={{ $json.keyword }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.location }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.limit }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.YELP_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d1f62c3a-5434-4690-9750-b2d6f8ad1568",
+      "name": "Yelp API — Search1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        1616
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Code — Expand Sources1').item.json;\nconst businesses = $input.first().json.businesses || [];\n\nif (!businesses.length) return [];\n\nreturn businesses.map((b) => ({\n  json: {\n    external_id: `yelp_${b.id}`,\n    source: 'yelp',\n    business_name: b.name || '',\n    category: (b.categories || []).map((c) => c.title).join(', '),\n    phone: b.display_phone || b.phone || '',\n    address: (b.location?.display_address || []).join(', '),\n    city: b.location?.city || cfg.city,\n    state: b.location?.state || '',\n    country: b.location?.country || cfg.country,\n    website_url: b.url || '',\n    rating: b.rating ?? null,\n    review_count: b.review_count ?? null,\n    status: b.url ? 'new' : 'no_website',\n    failure_reason: b.url ? null : 'No website URL found in Yelp listing',\n    search_query: cfg.search_query,\n    campaign_id: cfg.campaign_id,\n    yelp_id: b.id,\n  },\n}));"
+      },
+      "id": "0c289a79-3ed1-4309-8a88-3d43b05f3ba1",
+      "name": "Code — Normalize Yelp1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-Api-Key",
+              "value": "={{ $env.GOOGLE_API_KEY }}"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.id,places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.primaryType,places.location"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $json.search_query }}\",\n  \"pageSize\": {{ Math.min($json.limit, 20) }},\n  \"regionCode\": \"{{ $json.country }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "644c8320-2937-49e4-acaa-30068bbbe648",
+      "name": "Google Places — Text Search1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        1936
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Code — Expand Sources1').item.json;\nconst places = $input.first().json.places || [];\n\nif (!places.length) {\n  return [];\n}\n\nconst limit = Number(cfg.limit) || 50;\n\nreturn places.slice(0, limit).map((p) => {\n  const rawId = (p.id || '').replace('places/', '');\n  const website = (p.websiteUri || '').trim();\n  const hasWebsite = website.length > 0;\n\n  return {\n    json: {\n      external_id: `gmb_${rawId}`,\n      source: 'gmb',\n      business_name: p.displayName?.text || '',\n      category: p.primaryType || '',\n      phone: p.nationalPhoneNumber || '',\n      address: p.formattedAddress || '',\n      city: cfg.city || '',\n      state: '',\n      country: cfg.country || 'AU',\n      website_url: website,\n      google_url: rawId\n        ? `https://www.google.com/maps/place/?q=place_id:${rawId}`\n        : '',\n      rating: p.rating ?? null,\n      review_count: p.userRatingCount ?? null,\n      search_query: cfg.search_query || '',\n      campaign_id: cfg.campaign_id,\n      status: hasWebsite ? 'new' : 'no_website',\n      failure_reason: hasWebsite ? null : 'No website URL in Google Maps listing',\n    },\n  };\n});"
+      },
+      "id": "6529f8ec-365c-477d-9210-742bbffba08a",
+      "name": "Code — Normalize GMB1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        1936
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f1",
+              "leftValue": "={{ ($json.business_name || '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "f2",
+              "leftValue": "={{ ($json.external_id || '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "a642e600-7094-4d3f-82e5-9e5be659f239",
+              "leftValue": "={{ ($json.source || '').trim() }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "102d9e56-05dc-4cd9-8bf9-8d4b3d77b51a",
+      "name": "Filter — Valid Leads1",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        1776
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO leads (\n  external_id,\n  source,\n  business_name,\n  category,\n  phone,\n  address,\n  city,\n  state,\n  country,\n  website_url,\n  google_url,\n  rating,\n  review_count,\n  search_query,\n  campaign_id,\n  status,\n  failure_reason,\n  created_at,\n  updated_at\n) VALUES (\n  '{{ ($json.external_id || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.source || \"\").substring(0, 50).replace(/'/g, \"''\") }}',\n  '{{ ($json.business_name || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.category || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.phone || \"\").substring(0, 50).replace(/'/g, \"''\") }}',\n  '{{ ($json.address || \"\").replace(/'/g, \"''\") }}',\n  '{{ ($json.city || \"\").substring(0, 100).replace(/'/g, \"''\") }}',\n  '{{ ($json.state || \"\").substring(0, 100).replace(/'/g, \"''\") }}',\n  '{{ ($json.country || \"\").substring(0, 10).replace(/'/g, \"''\") }}',\n  '{{ ($json.website_url || \"\").replace(/'/g, \"''\") }}',\n  '{{ ($json.google_url || \"\").replace(/'/g, \"''\") }}',\n  {{ $json.rating !== null && $json.rating !== undefined && $json.rating !== \"\" ? $json.rating : \"NULL\" }},\n  {{ $json.review_count !== null && $json.review_count !== undefined && $json.review_count !== \"\" ? $json.review_count : \"NULL\" }},\n  '{{ ($json.search_query || \"\").replace(/'/g, \"''\") }}',\n  {{ $json.campaign_id ? $json.campaign_id : \"NULL\" }},\n  '{{ ($json.status || \"new\").substring(0, 50).replace(/'/g, \"''\") }}',\n  {{ $json.failure_reason ? \"'\" + String($json.failure_reason).replace(/'/g, \"''\") + \"'\" : \"NULL\" }},\n  NOW(),\n  NOW()\n)\nON CONFLICT (external_id) DO NOTHING;",
+        "options": {}
+      },
+      "id": "0b7e9677-f7b9-496f-ad60-9b3ad3bfac92",
+      "name": "Postgres — Insert Lead1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        320,
+        1904
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Set Search Parameters1').first().json;\nconst campaignId = $('Postgres — Create Campaign1').first().json.id;\nconst leads = $('Code — Deduplicate').all();\n\nlet rawCount = 0;\ntry { rawCount += $('Code — Normalize GMB1').all().length; } catch(e) {}\ntry { rawCount += $('Code — Normalize Yelp1').all().length; } catch(e) {}\n\nconst startedAt = cfg.started_at\n  ? new Date(cfg.started_at).getTime()\n  : Date.now();\n\nreturn [{\n  json: {\n    campaign_id: campaignId,\n    leads_found: rawCount,\n    leads_processed: leads.length,\n    leads_failed: Math.max(0, rawCount - leads.length),\n    duration_ms: Date.now() - startedAt,\n    notes: `WF1 lead_generation | ${cfg.search_query} | source=${cfg.source}`,\n  },\n}];"
+      },
+      "id": "96eeb92a-4beb-4669-bd4b-15e960c6864f",
+      "name": "Code — Summarize Run1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        1776
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE campaigns\nSET\n  leads_found = {{ $json.leads_found }},\n  leads_inserted = (SELECT COUNT(*) FROM leads WHERE campaign_id = {{ $json.campaign_id }}),\n  status = 'completed',\n  completed_at = NOW()\nWHERE id = {{ $json.campaign_id }};",
+        "options": {}
+      },
+      "id": "72640b3b-2742-4089-abc5-24b8763cb473",
+      "name": "Postgres — Update Campaign1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        784,
+        1632
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n)\nVALUES (\n  'lead_generation',\n  {{ $json.leads_processed || 0 }},\n  {{ $json.leads_failed || 0 }},\n  {{ $json.duration_ms || 0 }},\n  '{{ ($json.notes || \"WF1 completed\").replace(/'/g, \"''\") }}'\n);",
+        "options": {}
+      },
+      "id": "dc9c5d6f-f454-4fdf-ba50-d19a4b0378a7",
+      "name": "Postgres — Workflow Log1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        816,
+        1808
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "keyword",
+              "value": "={{ $json['Business Type'].trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "city",
+              "value": "={{ $json['City'].trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "country",
+              "value": "={{ ($json['Country'] || 'US').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "location",
+              "value": "={{ $json['City'].trim() + ', ' + ($json['Country'] || 'US').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "source",
+              "value": "={{ $json['Source'] }}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "limit",
+              "value": "={{ Math.min(Number($json['Max Results']) || 50, 50) }}",
+              "type": "number"
+            },
+            {
+              "id": "a7",
+              "name": "search_query",
+              "value": "={{ $json['Business Type'].trim() + ' in ' + $json['City'].trim() + ', ' + ($json['Country'] || 'US').trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "a8",
+              "name": "started_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "019a42c3-cdff-4caa-820b-b9dd1b8345e3",
+      "name": "Set Search Parameters1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1776,
+        1776
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Code — Deduplicate": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Postgres — Insert Lead1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Trigger — Search Input1": {
+      "main": [
+        [
+          {
+            "node": "Set Search Parameters1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Create Campaign1": {
+      "main": [
+        [
+          {
+            "node": "Code — Expand Sources1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Expand Sources1": {
+      "main": [
+        [
+          {
+            "node": "Switch — Source1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch — Source1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Google Places — Text Search1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yelp API — Search1": {
+      "main": [
+        [
+          {
+            "node": "Code — Normalize Yelp1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Code — Normalize Yelp1": {
+      "main": [
+        []
+      ]
+    },
+    "Google Places — Text Search1": {
+      "main": [
+        [
+          {
+            "node": "Code — Normalize GMB1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Mark Campaign Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Normalize GMB1": {
+      "main": [
+        [
+          {
+            "node": "Filter — Valid Leads1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter — Valid Leads1": {
+      "main": [
+        [
+          {
+            "node": "Code — Deduplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Insert Lead1": {
+      "main": [
+        [
+          {
+            "node": "Code — Summarize Run1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Mark Campaign Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Summarize Run1": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Update Campaign1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Postgres — Workflow Log1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Update Campaign1": {
+      "main": [
+        []
+      ]
+    },
+    "Set Search Parameters1": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Create Campaign1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Workflow Log1": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f46b5dbe-3614-4f92-b0d9-702a230345b2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"
+  },
+  "nodeGroups": [],
+  "id": "bb2SopyjUR9Ci8vk",
+  "tags": []
+}
