@@ -3,929 +3,133 @@
   "nodes": [
     {
       "parameters": {
-        "mode": "combine",
-        "fieldsToMatchString": "id",
-        "options": {}
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
       },
-      "id": "5b1c6a27-9838-4d69-9362-ad8efd91935d",
-      "name": "Merge (A + B by position)",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.1,
+      "id": "b1ac89b3-a629-4586-9b0b-0b584d17e2f1",
+      "name": "Schedule — Every 10 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
       "position": [
-        -720,
-        528
+        -2112,
+        144
       ]
     },
     {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "// Extract: emails (HTML + JS fallback), socials, pain points — 2026-06-15 16:30 UTC+5\nconst it = $json;\nconst all = it.raw_html || '';\nconst base = (it.website_url || '').trim();\nconst ps  = it.pagespeed_score !== undefined ? it.pagespeed_score : null;\nconst seo = it.seo_score       !== undefined ? it.seo_score       : null;\nconst acc = it.mobile_score    !== undefined ? it.mobile_score    : null;\n\nconst eRx = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\nconst block = [\n  'noreply','no-reply','donotreply','example',\n  '.png','.jpg','.jpeg','.gif','.svg','.webp',\n  'sentry','wixpress','wordpress','schema.org','godaddy'\n];\n\nconst htmlEmails = [...new Set(all.match(eRx) || [])]\n  .filter(e => { const l = e.toLowerCase(); return e.length < 100 && !block.some(b => l.includes(b)); });\n\nconst preEmails = (it.raw_emails || [])\n  .filter(e => { const l = e.toLowerCase(); return e.length < 100 && !block.some(b => l.includes(b)); });\n\nconst emails = [...new Set([...htmlEmails, ...preEmails])];\n\nconst prio = ['contact', 'info', 'hello', 'sales', 'support', 'admin', 'office'];\nconst email = emails.find(e => prio.some(p => e.toLowerCase().startsWith(p))) || emails[0] || null;\n\nconst grab = (re, junkPaths) => {\n  const matches = all.match(re) || [];\n  for (const m of matches) {\n    const clean = m.replace(/[\"'>].*$/, '').split('?')[0].replace(/\\/$/, '');\n    const path = clean.split('/').slice(3).join('/');\n    if (path.length < 3) continue;                        // /tr jaise short paths skip\n    if (junkPaths && junkPaths.some(j => clean.includes(j))) continue;\n    return clean;\n  }\n  return null;\n};\n\nconst junk = ['sharer', 'share', '/tr', 'plugins', 'dialog', 'login'];\n\nconst facebook_url  = grab(/https?:\\/\\/(www\\.)?facebook\\.com\\/[^\"'\\s<>]+/gi, junk);\nconst instagram_url = grab(/https?:\\/\\/(www\\.)?instagram\\.com\\/[^\"'\\s<>]+/gi, junk);\nconst twitter_url   = grab(/https?:\\/\\/(www\\.)?(twitter|x)\\.com\\/[^\"'\\s<>]+/gi, junk);\nconst linkedin_url  = grab(/https?:\\/\\/(www\\.)?linkedin\\.com\\/(company|in)\\/[^\"'\\s<>]+/gi, junk);\n\nconst text = all\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s{2,}/g, ' ')\n  .trim().slice(0, 4000);\nconst lc = all.toLowerCase();\n\nconst has_https            = base.toLowerCase().startsWith('https');\nconst has_viewport         = /<meta[^>]+viewport/i.test(all);\nconst has_meta_description = /<meta[^>]+name=[\"']description[\"'][^>]*content=[\"'][^\"']+[\"']/i.test(all);\nconst titleM               = all.match(/<title[^>]*>([^<]*)<\\/title>/i);\nconst has_title            = !!(titleM && titleM[1].trim());\nconst imgs                 = (all.match(/<img\\b/gi) || []).length;\nconst imgsNoAlt            = (all.match(/<img\\b(?:(?!alt=)[^>])*>/gi) || []).length;\nconst has_contact_form     = /<form/i.test(all);\nconst cYear                = (all.match(/(?:©|&copy;|copyright)[^0-9]{0,12}(20\\d{2})/i) || [])[1] || null;\nconst nowY                 = new Date().getFullYear();\nconst stale_copyright      = cYear ? (nowY - Number(cYear) >= 2) : null;\nconst plats                = ['wordpress','wix','squarespace','shopify','godaddy','weebly','kvcore'];\nconst platform             = plats.find(p => lc.includes(p)) || null;\nconst word_count           = text.split(/\\s+/).filter(Boolean).length;\nconst social_count         = [linkedin_url, facebook_url, instagram_url, twitter_url].filter(Boolean).length;\n\nconst pains = [];\nif (ps  !== null && ps  < 60) pains.push('Slow page load (PageSpeed ' + ps + '/100)');\nif (seo !== null && seo < 70) pains.push('Weak SEO (score ' + seo + '/100)');\nif (acc !== null && acc < 70) pains.push('Poor mobile UX (score ' + acc + '/100)');\nif (!has_https)            pains.push('No HTTPS — site is insecure');\nif (!has_viewport)         pains.push('Not mobile-responsive');\nif (!has_meta_description) pains.push('Missing meta description');\nif (!has_title)            pains.push('Missing page title');\nif (imgs > 0 && imgsNoAlt / imgs > 0.5) pains.push(imgsNoAlt + ' of ' + imgs + ' images missing alt text');\nif (stale_copyright)       pains.push('Outdated copyright year (' + cYear + ')');\nif (word_count < 150)      pains.push('Thin content (' + word_count + ' words)');\nif (!has_contact_form)     pains.push('No contact form found');\nif (social_count === 0)    pains.push('No social media profiles linked');\n\nreturn {\n  id:            it.id,\n  business_name: it.business_name,\n  website_url:   base,\n  email_found:   !!email,\n  email:         email,\n  facebook_url:  facebook_url,\n  instagram_url: instagram_url,\n  twitter_url:   twitter_url,\n  linkedin_url:  linkedin_url,\n  pagespeed_score: ps,\n  seo_score:       seo,\n  mobile_score:    acc,\n  pain_points:   pains,\n  pages_crawled: it.pages_crawled,\n};"
-      },
-      "id": "7cacaf61-3c52-47c9-8582-62199ddbace4",
-      "name": "Extract Contacts & Pain Points",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "parameters": {},
+      "id": "6fc86b75-cc75-4f4b-a9fd-b8194ec6d5b7",
+      "name": "Manual Trigger (Test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
       "position": [
-        -480,
-        528
+        -2128,
+        352
       ]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "WITH picked AS (\n    SELECT id\n    FROM leads\n    WHERE status = 'new'\n      AND retry_count < 3\n      AND website_url IS NOT NULL\n      AND website_url <> ''\n    ORDER BY created_at ASC\n    LIMIT {{ $('config').first().json.batchSize }}\n    FOR UPDATE SKIP LOCKED\n)\n\nUPDATE leads l\nSET\n    status = 'enriching',\n    updated_at = NOW()\nFROM picked\nWHERE l.id = picked.id\n\nRETURNING\n    l.id,\n    l.business_name,\n    l.website_url,\n    l.retry_count,\n    l.city,\n    l.category;\n",
-        "options": {}
-      },
-      "id": "672e16b3-7a83-4d4c-a7da-7d547f540acc",
-      "name": "Claim Leads (lock + mark enriching)1",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        -1200,
-        528
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "nY87kKchmNtbPoK2",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "schema": {
-          "__rl": true,
-          "value": "public",
-          "mode": "list",
-          "cachedResultName": "public"
-        },
-        "table": {
-          "__rl": true,
-          "value": "leads",
-          "mode": "list",
-          "cachedResultName": "leads"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "id": "={{ $json.id }}",
-            "pagespeed_score": "={{ $json.pagespeed_score }}",
-            "seo_score": "={{ $json.seo_score }}",
-            "mobile_score": "={{ $json.mobile_score }}",
-            "enriched_at": "={{ $now.toISO() }}",
-            "updated_at": "={{ $now.toISO() }}",
-            "pages_crawled": "={{ $json.pages_crawled }}",
-            "pain_points": "={{ JSON.stringify($json.pain_points) }}",
-            "linkedin_url": "={{ $json.linkedin_url }}",
-            "twitter_url": "={{ $json.twitter_url }}",
-            "instagram_url": "={{ $json.instagram_url }}",
-            "facebook_url": "={{ $json.facebook_url }}",
-            "email": "={{ $json.email }}"
-          },
-          "matchingColumns": [
-            "id"
-          ],
-          "schema": [
-            {
-              "id": "id",
-              "displayName": "id",
-              "required": false,
-              "defaultMatch": true,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "source",
-              "displayName": "source",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "search_query",
-              "displayName": "search_query",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "external_id",
-              "displayName": "external_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "business_name",
-              "displayName": "business_name",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "category",
-              "displayName": "category",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "phone",
-              "displayName": "phone",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "address",
-              "displayName": "address",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "city",
-              "displayName": "city",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "state",
-              "displayName": "state",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "country",
-              "displayName": "country",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "rating",
-              "displayName": "rating",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "review_count",
-              "displayName": "review_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "website_url",
-              "displayName": "website_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "yelp_url",
-              "displayName": "yelp_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "pagespeed_score",
-              "displayName": "pagespeed_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "seo_score",
-              "displayName": "seo_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "mobile_score",
-              "displayName": "mobile_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "accessibility_score",
-              "displayName": "accessibility_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "performance_json",
-              "displayName": "performance_json",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "object",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "audit_summary",
-              "displayName": "audit_summary",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "email_subject",
-              "displayName": "email_subject",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "personalized_email",
-              "displayName": "personalized_email",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "failure_reason",
-              "displayName": "failure_reason",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "retry_count",
-              "displayName": "retry_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "enriched_at",
-              "displayName": "enriched_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "audited_at",
-              "displayName": "audited_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "sent_at",
-              "displayName": "sent_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "updated_at",
-              "displayName": "updated_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "google_url",
-              "displayName": "google_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": true
-            },
-            {
-              "id": "email",
-              "displayName": "email",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "facebook_url",
-              "displayName": "facebook_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "instagram_url",
-              "displayName": "instagram_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "twitter_url",
-              "displayName": "twitter_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "linkedin_url",
-              "displayName": "linkedin_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "pain_points",
-              "displayName": "pain_points",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "pages_crawled",
-              "displayName": "pages_crawled",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "id": "a71845e9-ff48-438a-b8d2-969cbbf375e5",
-      "name": "Mark Enriched1",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        0,
-        432
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "nY87kKchmNtbPoK2",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "schema": {
-          "__rl": true,
-          "mode": "list",
-          "value": "public"
-        },
-        "table": {
-          "__rl": true,
-          "mode": "list",
-          "value": "leads"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "id": "={{ $json.id }}",
-            "pagespeed_score": "={{ $json.pagespeed_score }}",
-            "seo_score": "={{ $json.seo_score }}",
-            "mobile_score": "={{ $json.mobile_score }}",
-            "status": "no_email",
-            "enriched_at": "={{ $now.toISO() }}",
-            "updated_at": "={{ $now.toISO() }}",
-            "rating": 0,
-            "review_count": 0,
-            "accessibility_score": 0,
-            "retry_count": 0
-          },
-          "matchingColumns": [
-            "id"
-          ],
-          "schema": [
-            {
-              "id": "id",
-              "displayName": "id",
-              "required": false,
-              "defaultMatch": true,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "source",
-              "displayName": "source",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "search_query",
-              "displayName": "search_query",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "external_id",
-              "displayName": "external_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "business_name",
-              "displayName": "business_name",
-              "required": true,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "category",
-              "displayName": "category",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "phone",
-              "displayName": "phone",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "address",
-              "displayName": "address",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "city",
-              "displayName": "city",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "state",
-              "displayName": "state",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "country",
-              "displayName": "country",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "rating",
-              "displayName": "rating",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "review_count",
-              "displayName": "review_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "website_url",
-              "displayName": "website_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "yelp_url",
-              "displayName": "yelp_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "pagespeed_score",
-              "displayName": "pagespeed_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "seo_score",
-              "displayName": "seo_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "mobile_score",
-              "displayName": "mobile_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "accessibility_score",
-              "displayName": "accessibility_score",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "performance_json",
-              "displayName": "performance_json",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "object",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "audit_summary",
-              "displayName": "audit_summary",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "email_subject",
-              "displayName": "email_subject",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "personalized_email",
-              "displayName": "personalized_email",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "status",
-              "displayName": "status",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "failure_reason",
-              "displayName": "failure_reason",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "retry_count",
-              "displayName": "retry_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "number",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "created_at",
-              "displayName": "created_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "enriched_at",
-              "displayName": "enriched_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "audited_at",
-              "displayName": "audited_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "sent_at",
-              "displayName": "sent_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true,
-              "removed": false
-            },
-            {
-              "id": "updated_at",
-              "displayName": "updated_at",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "dateTime",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "google_url",
-              "displayName": "google_url",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true,
-              "removed": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "id": "05f2e0ae-d36a-4a1d-8c8b-5d01b08e40b1",
-      "name": "Mark No Email1",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        0,
-        640
-      ],
-      "credentials": {
-        "postgres": {
-          "id": "nY87kKchmNtbPoK2",
-          "name": "Postgres account"
-        }
-      }
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "a3",
+              "id": "cfg-batch",
               "name": "batchSize",
               "type": "number",
-              "value": 2
+              "value": 1
             },
             {
-              "id": "1428f81f-5cd9-4ae0-8b24-3d9fda499e8e",
-              "name": "maxpages",
-              "value": 3,
+              "id": "cfg-pages",
+              "name": "maxPages",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "cfg-retries",
+              "name": "maxRetries",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "cfg-wf",
+              "name": "workflowName",
+              "type": "string",
+              "value": "enrichment"
+            },
+            {
+              "id": "cfg-start",
+              "name": "runStartTs",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            },
+            {
+              "id": "fbd8432b-886e-4e94-92da-ce4747b4d7c3",
+              "name": "retryCountHome",
+              "value": 2,
               "type": "number"
+            },
+            {
+              "id": "12fe9bf0-3015-43f0-8897-5a6837196a47",
+              "name": "retryCountPath",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "a681826e-b224-473d-b979-3d79afc6100a",
+              "name": "renderHomepage",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "0268883c-ec06-4e5c-b4fe-7dadeaf81074",
+              "name": "earlyExitOnEmail",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "3827267d-8c28-424e-824f-5a812def37a5",
+              "name": "fetchContactIfNoSocial",
+              "value": true,
+              "type": "boolean"
             }
           ]
         },
         "options": {}
       },
-      "id": "030e8454-f4e8-4dca-a962-eaa35be63fb6",
+      "id": "8ef2b81e-064f-49ee-b826-6ec3d3e954d0",
       "name": "config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1408,
-        528
-      ]
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        -1600,
-        528
-      ],
-      "id": "81f1702d-00f1-45e7-9f62-3cbd0c2daecb",
-      "name": "When clicking ‘Execute workflow’"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "// Branch A: Smart multi-page crawl — pre-strip email extraction — 2026-06-20 UTC+5\nconst cfg = $('config').first().json;\nconst KEY = $env.SCRAPER_API_KEY;\nconst MAX = Number(cfg.maxPages) || 3;\nconst http = this.helpers.httpRequest;\nconst lead = $json;\n\nif (!KEY) {\n  return { id: lead.id, business_name: lead.business_name, website_url: lead.website_url || '', pages_crawled: 0, raw_html: '', raw_emails: [], crawl_error: 'missing SCRAPER_API_KEY env var' };\n}\n\n// Clean URL\nlet base = (lead.website_url || '')\n  .replace(/[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200D\\uFEFF]/g, '')\n  .trim();\n\nif (!base) {\n  return { id: lead.id, business_name: lead.business_name, website_url: '', pages_crawled: 0, raw_html: '', raw_emails: [], crawl_error: 'no_url' };\n}\n\nif (!/^https?:\\/\\//i.test(base)) { base = 'https://' + base; }\n\nlet origin = base, baseHttps = base;\ntry {\n  const u = new URL(base);\n  origin = u.origin;\n  baseHttps = 'https://' + u.hostname;\n  base = u.href;\n} catch (e) {\n  const hm = base.match(/^https?:\\/\\/([^/]+)/i);\n  if (hm) { baseHttps = 'https://' + hm[1]; origin = baseHttps; }\n}\n\nconst scraperUrl = t =>\n  'https://api.scraperapi.com/?api_key=' + KEY +\n  '&url=' + encodeURIComponent(t) + '&render=false';\n\nconst get = async (t) => {\n  try {\n    const r = await http({ method: 'GET', url: scraperUrl(t), timeout: 35000 });\n    const body = typeof r === 'string' ? r : (r.body || r.data || '');\n    return body.length > 500 ? body : '';\n  } catch (e) { return ''; }\n};\n\n// Homepage\nlet home = await get(base);\nif (!home && base.startsWith('https://')) {\n  home = await get(base.replace('https://', 'http://'));\n}\nif (!home) {\n  return { id: lead.id, business_name: lead.business_name, website_url: base, pages_crawled: 0, raw_html: '', raw_emails: [], crawl_error: 'homepage_failed' };\n}\n\n// HTML link discovery\nconst src = home.replace(/<script[\\s\\S]*?<\\/script>/gi, '');\nconst htmlLinks = new Set();\nconst rx = /href=[\"']([^\"'#?]+)[\"']/gi;\nlet m;\nwhile ((m = rx.exec(src)) !== null) {\n  const h = m[1].trim();\n  if (!h || h.startsWith('http') || h.startsWith('//')) continue;\n  if (h.startsWith('/') && /(contact|about|team|support|connect)/i.test(h)) {\n    htmlLinks.add(h);\n  }\n}\n\nconst commonPaths = [\n  '/contact', '/contact.php', '/contact-us', '/contact_us',\n  '/about', '/about.php', '/about-us', '/about_us',\n  '/kontakt', '/impressum', '/team', '/our-team',\n  '/support', '/reach-us', '/get-in-touch'\n];\n\nconst allPaths = [...new Set([...htmlLinks, ...commonPaths])].slice(0, MAX * 2);\n\nconst results = await Promise.all(\n  allPaths.map(async (path) => {\n    const url = baseHttps + path;\n    const content = await get(url);\n    return { path, content };\n  })\n);\nconst found = results.filter(r => r.content.length > 0);\nconst extra = found.slice(0, MAX - 1).map(r => r.content);\n\n// === STEP 1: Extract emails from FULL HTML BEFORE stripping ===\n// (emails inside <script> tags e.g. account_info JSON will be captured here)\nconst eRxPre = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\nconst allPages = [home, ...extra];\nconst rawEmails = [...new Set(\n  allPages.flatMap(p => p.match(eRxPre) || [])\n)].filter(e =>\n  e.length < 80 &&\n  !['sentry', 'noreply', 'no-reply', 'example', 'nr-data', 'jquery']\n    .some(j => e.toLowerCase().includes(j))\n);\n\n// === STEP 2: Strip scripts/styles to reduce size, then combine ===\nconst strip = h =>\n  h.replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n   .replace(/<style[\\s\\S]*?<\\/style>/gi, '');\n\nconst all = strip(home) + '\\n' + extra.map(e => strip(e)).join('\\n');\nconst raw_html = all.length > 500000\n  ? all.slice(0, 500000) + '\\n<!-- TRUNCATED -->'\n  : all;\n\nreturn {\n  id: lead.id,\n  business_name: lead.business_name,\n  website_url: base,\n  pages_crawled: extra.length + 1,\n  pages_found: found.map(r => r.path),\n  raw_html,\n  raw_emails: rawEmails,   // ← emails from inside JS tags\n  crawl_error: null\n};"
-      },
-      "id": "95043371-ba1a-4d65-a94d-3d51a30fa229",
-      "name": "Crawl Website",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -944,
-        384
+        -1904,
+        272
       ]
     },
     {
       "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "// Branch B: PageSpeed single call production-ready — 2026-06-20 UTC+5\nconst GKEY = $env.GOOGLE_API_KEY;\nconst http = this.helpers.httpRequest;\nconst it = $json;\nconst base = (it.website_url || '').trim();\n\nif (!base || !GKEY) {\n  return { id: it.id, website_url: base, pagespeed_score: null, seo_score: null, mobile_score: null, pagespeed_error: !GKEY ? 'missing GOOGLE_API_KEY env var' : 'no_url' };\n}\n\nlet ps = null, seo = null, acc = null, pagespeed_error = null;\n\ntry {\n  const url =\n    'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' +\n    '?url='      + encodeURIComponent(base) +\n    '&key='      + encodeURIComponent(GKEY) +\n    '&strategy=mobile' +\n    '&category=performance' +\n    '&category=seo' +\n    '&category=accessibility';\n\n  const r = await http({ method: 'GET', url, json: true, timeout: 90000 });\n\n  const cats = r?.lighthouseResult?.categories || {};\n  ps  = cats.performance   ? Math.round(cats.performance.score   * 100) : null;\n  seo = cats.seo           ? Math.round(cats.seo.score           * 100) : null;\n  acc = cats.accessibility ? Math.round(cats.accessibility.score * 100) : null;\n\n} catch (e) {\n  pagespeed_error = e.message?.includes('timeout') ? 'timeout' : (e.message || 'failed');\n}\n\nreturn { id: it.id, website_url: base, pagespeed_score: ps, seo_score: seo, mobile_score: acc, pagespeed_error };"
+        "operation": "executeQuery",
+        "query": "WITH picked AS (\n    SELECT id\n    FROM leads\n    WHERE status = 'new'\n      AND retry_count < {{ $('config').first().json.maxRetries }}\n      AND website_url IS NOT NULL\n      AND TRIM(website_url) <> ''\n    ORDER BY created_at ASC\n    LIMIT {{ $('config').first().json.batchSize }}\n    FOR UPDATE SKIP LOCKED\n)\nUPDATE leads l\nSET\n    status     = 'enriching',\n    updated_at = NOW()\nFROM picked\nWHERE l.id = picked.id\nRETURNING\n    l.id,\n    l.business_name,\n    l.website_url,\n    l.retry_count,\n    l.city,\n    l.category,\n    l.source,\n    l.external_id;",
+        "options": {}
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "d23504e2-622c-4413-9458-2ba0035a977a",
+      "name": "Claim Leads (lock + mark enriching)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
       "position": [
-        -944,
-        624
+        -1440,
+        240
       ],
-      "id": "615d8223-c544-48d4-b5fb-1e40c88bc999",
-      "name": "Page speed insights"
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
     },
     {
       "parameters": {
@@ -938,7 +142,193 @@
           },
           "conditions": [
             {
-              "id": "c1",
+              "id": "cond-has-id",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "41495920-2c41-4109-8470-4e67c02ef6fb",
+      "name": "Any Leads to Enrich?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n) VALUES (\n  '{{ $('config').first().json.workflowName }}',\n  NOW(),\n  0,\n  0,\n  EXTRACT(EPOCH FROM (NOW() - '{{ $('config').first().json.runStartTs }}'::timestamptz)) * 1000,\n  'no new leads with website in queue'\n);",
+        "options": {}
+      },
+      "id": "141f0d04-edc9-457d-b1e4-02c3e6c036e7",
+      "name": "Log Empty Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -960,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Branch A: Smart credit-optimized crawl — WF2 production\n// Matches: Claim Leads input, Merge by id, Extract Contacts downstream\n\nconst cfg = $('config').first().json;\nconst KEY = $env.SCRAPERAPI_KEY || $env.SCRAPER_API_KEY;\nconst MAX_PAGES = Number(cfg.maxPages ?? cfg.maxpages) || 3;\nconst HOME_RETRIES = Number(cfg.retryCountHome ?? cfg.retryCount) || 2;\nconst PATH_RETRIES = Number(cfg.retryCountPath) || 1;\nconst RENDER_HOME = cfg.renderHomepage === true || cfg.renderHomepage === 'true';\nconst EARLY_EXIT = cfg.earlyExitOnEmail !== false && cfg.earlyExitOnEmail !== 'false';\nconst FETCH_CONTACT_IF_NO_SOCIAL =\n  cfg.fetchContactIfNoSocial !== false && cfg.fetchContactIfNoSocial !== 'false';\n\nconst http = this.helpers.httpRequest;\nconst lead = $json;\nconst crawledAt = new Date().toISOString();\nlet scraperapiCalls = 0;\n\nconst fail = (fields) => ({\n  id: lead.id,\n  business_name: lead.business_name,\n  website_url: fields.website_url ?? lead.website_url ?? '',\n  retry_count: lead.retry_count ?? 0,\n  city: lead.city,\n  category: lead.category,\n  pages_crawled: 0,\n  pages_found: [],\n  raw_html: '',\n  raw_emails: [],\n  scraperapi_calls: scraperapiCalls,\n  crawled_at: crawledAt,\n  crawl_error: fields.crawl_error,\n});\n\nif (!KEY) {\n  return fail({ crawl_error: 'missing SCRAPERAPI_KEY or SCRAPER_API_KEY env var' });\n}\n\n// ── URL clean ───────────────────────────────────────────────────\nlet base = (lead.website_url || '')\n  .replace(/[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200D\\uFEFF]/g, '')\n  .trim();\n\nif (!base) return fail({ website_url: '', crawl_error: 'no_url' });\nif (!/^https?:\\/\\//i.test(base)) base = 'https://' + base;\n\nlet baseHttps = base;\ntry {\n  const u = new URL(base);\n  baseHttps = 'https://' + u.hostname;\n  base = u.href;\n} catch (e) {\n  const hm = base.match(/^https?:\\/\\/([^/]+)/i);\n  if (hm) baseHttps = 'https://' + hm[1];\n}\n\n// ── Scraper helpers ─────────────────────────────────────────────\nconst scraperUrl = (target, render = false) =>\n  'https://api.scraperapi.com/?api_key=' + KEY +\n  '&url=' + encodeURIComponent(target) +\n  '&render=' + (render ? 'true' : 'false');\n\nconst sleep = (ms) => new Promise((r) => setTimeout(r, ms));\nconst MIN_BODY_LEN = 500;\n\nconst fetchPage = async (target, maxRetries, render = false) => {\n  for (let attempt = 1; attempt <= maxRetries; attempt++) {\n    scraperapiCalls++;\n    try {\n      const r = await http({\n        method: 'GET',\n        url: scraperUrl(target, render),\n        timeout: render ? 90000 : 35000,\n      });\n      const body = typeof r === 'string' ? r : (r.body || r.data || '');\n      if (body.length >= MIN_BODY_LEN) return body;\n      if (attempt === maxRetries && body.length > 0 && /<html|<body|<!doctype/i.test(body)) {\n        return body;\n      }\n    } catch (e) {\n      // retry with backoff\n    }\n    if (attempt < maxRetries) await sleep(1000 * Math.pow(2, attempt - 1));\n  }\n  return '';\n};\n\n// ── Email helpers (sync with Extract node) ──────────────────────\nconst EMAIL_RX = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\nconst EMAIL_BLOCK = [\n  'sentry', 'noreply', 'no-reply', 'donotreply', 'example',\n  'nr-data', 'jquery', 'wixpress', 'godaddy', 'schema.org',\n  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',\n];\nconst EMAIL_PRIO = ['contact', 'info', 'hello', 'sales', 'support', 'admin', 'office'];\n\nconst extractEmails = (pages) => {\n  const emails = [...new Set(pages.flatMap((p) => p.match(EMAIL_RX) || []))]\n    .filter((e) => e.length < 100 && !EMAIL_BLOCK.some((b) => e.toLowerCase().includes(b)));\n  const best =\n    emails.find((e) => EMAIL_PRIO.some((p) => e.toLowerCase().startsWith(p))) ||\n    emails[0] ||\n    null;\n  return { all: emails, best, found: !!best };\n};\n\n// ── Social pre-check (fixes early-exit trade-off) ─────────────────\nconst SOCIAL_RX = {\n  facebook: /facebook\\.com\\/[^\"'\\s<>]+/i,\n  instagram: /instagram\\.com\\/[^\"'\\s<>]+/i,\n  linkedin: /linkedin\\.com\\/(?:company|in)\\/[^\"'\\s<>]+/i,\n  twitter: /(?:twitter|x)\\.com\\/[^\\\"'\\s<>]+/i,\n\n};\n\nconst hasSocialLinks = (html) =>\n  SOCIAL_RX.facebook.test(html) ||\n  SOCIAL_RX.instagram.test(html) ||\n  SOCIAL_RX.linkedin.test(html) ||\n  SOCIAL_RX.twitter.test(html);\n\n\nconst strip = (h) =>\n  h\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, '');\n\n// ── Path discovery (FR-3.2 bounded crawl) ─────────────────────────\nconst CONTACT_PATHS = [\n  '/contact', '/contact-us', '/contact_us', '/contact.php',\n  '/get-in-touch', '/reach-us', '/support', '/kontakt', '/impressum',\n];\nconst ABOUT_PATHS = [\n  '/about', '/about-us', '/about_us', '/about.php', '/team', '/our-team',\n];\nconst PATH_PRIORITY = [...CONTACT_PATHS, ...ABOUT_PATHS];\n\nconst discoverPathsFromHtml = (home) => {\n  const src = home.replace(/<script[\\s\\S]*?<\\/script>/gi, '');\n  const found = new Set();\n  const linkRx = /href=[\"']([^\"'#?]+)[\"']/gi;\n  let m;\n  while ((m = linkRx.exec(src)) !== null) {\n    const h = m[1].trim();\n    if (!h || h.startsWith('http') || h.startsWith('//')) continue;\n    if (h.startsWith('/') && /(contact|about|team|support|connect|kontakt)/i.test(h)) {\n      found.add(h.split('?')[0].replace(/\\/$/, '') || h);\n    }\n  }\n  // Priority: HTML links first, then common paths (deduped)\n  const ordered = [];\n  for (const p of [...found, ...PATH_PRIORITY]) {\n    const norm = p.startsWith('/') ? p : '/' + p;\n    if (!ordered.includes(norm)) ordered.push(norm);\n  }\n  return ordered;\n};\n\nconst buildOutput = (pageContents, pagesFound, crawlError) => {\n  const raw_html_full = pageContents.map(strip).join('\\n');\n  const raw_html =\n    raw_html_full.length > 500000\n      ? raw_html_full.slice(0, 500000) + '\\n<!-- TRUNCATED -->'\n      : raw_html_full;\n\n  const emailResult = extractEmails(pageContents);\n\n  return {\n    id: lead.id,\n    business_name: lead.business_name,\n    website_url: base,\n    retry_count: lead.retry_count ?? 0,\n    city: lead.city,\n    category: lead.category,\n    pages_crawled: pageContents.length,\n    pages_found: pagesFound,\n    raw_html,\n    raw_emails: emailResult.all,\n    scraperapi_calls: scraperapiCalls,\n    crawled_at: crawledAt,\n    crawl_error: crawlError,\n  };\n};\n\n// ── Step 1: Homepage (always) ─────────────────────────────────────\nlet home = await fetchPage(base, HOME_RETRIES, RENDER_HOME);\nif (!home && base.startsWith('https://')) {\n  home = await fetchPage(base.replace('https://', 'http://'), 1, RENDER_HOME);\n}\nif (!home) {\n  return buildOutput([], [], 'homepage_failed');\n}\n\nconst pageContents = [home];\nconst pagesFound = ['/'];\nconst visited = new Set(['/']);\n\nlet emailResult = extractEmails(pageContents);\nlet hasSocial = hasSocialLinks(home);\n\n// ── Step 2: Smart extra-page strategy ─────────────────────────────\n// Trade-off fix:\n// - Email + social on home → stop (max savings)\n// - Email but no social → try contact paths only (WF3 social audit)\n// - No email → crawl priority paths until email or MAX_PAGES\n\nconst canAddMore = () => pageContents.length < MAX_PAGES;\n\nconst shouldStop = () => {\n  if (!EARLY_EXIT) return !canAddMore();\n  if (emailResult.found && hasSocial) return true;\n  if (emailResult.found && !hasSocial && !FETCH_CONTACT_IF_NO_SOCIAL) return true;\n  return false;\n};\n\nif (!shouldStop() && canAddMore()) {\n  const candidates = discoverPathsFromHtml(home);\n\n  for (const path of candidates) {\n    if (!canAddMore()) break;\n    if (shouldStop()) break;\n    if (visited.has(path)) continue;\n\n    // Email mil chuka + social bhi → stop\n    if (EARLY_EXIT && emailResult.found && hasSocial) break;\n\n    // Email mil chuka, social nahi → sirf contact-type paths\n    if (emailResult.found && !hasSocial && FETCH_CONTACT_IF_NO_SOCIAL) {\n      const isContactPath = CONTACT_PATHS.some(\n        (cp) => path === cp || path.startsWith(cp + '/')\n      );\n      if (!isContactPath) continue;\n    }\n\n    // Email nahi → contact + about dono try (priority order)\n    visited.add(path);\n    const content = await fetchPage(baseHttps + path, PATH_RETRIES, false);\n    if (!content) continue;\n\n    pageContents.push(content);\n    pagesFound.push(path);\n    emailResult = extractEmails(pageContents);\n    if (!hasSocial) hasSocial = hasSocialLinks(content);\n\n    if (EARLY_EXIT && emailResult.found && hasSocial) break;\n    if (EARLY_EXIT && emailResult.found && !FETCH_CONTACT_IF_NO_SOCIAL) break;\n  }\n}\n\nreturn buildOutput(pageContents, pagesFound, null);"
+      },
+      "id": "2951c37b-1513-4af8-b1cf-cbfb793833c4",
+      "name": "Crawl Website",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        96
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const cfg = $('config').first().json;\n\nconst API_KEY =\n  $env.GOOGLE_PSI_KEY ||\n  $env.GOOGLE_API_KEY;\n\nconst http = this.helpers.httpRequest;\nconst lead = $json;\nconst websiteUrl = String(lead.website_url || '').trim();\n\nconst timeout = Number(cfg.pagespeedTimeoutMs) || 90000;\nconst maxRetries = Number(cfg.pagespeedRetries) || 2;\nconst fetchedAt = new Date().toISOString();\n\nconst sleep = (ms) =>\n  new Promise((resolve) => setTimeout(resolve, ms));\n\nconst buildUrl = (strategy) =>\n  'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' +\n  '?url=' + encodeURIComponent(websiteUrl) +\n  '&key=' + encodeURIComponent(API_KEY) +\n  '&strategy=' + strategy +\n  '&category=performance' +\n  '&category=seo' +\n  '&category=accessibility' +\n  '&category=best-practices';\n\nconst fetchPageSpeed = async (strategy) => {\n  let lastError = null;\n\n  for (let attempt = 1; attempt <= maxRetries; attempt++) {\n    try {\n      const response = await http({\n        method: 'GET',\n        url: buildUrl(strategy),\n        json: true,\n        timeout,\n      });\n\n      return {\n        response,\n        error: null,\n      };\n    } catch (error) {\n      lastError = error.message || `${strategy} PageSpeed failed`;\n\n      const retryable =\n        /timeout|429|5\\d\\d|ECONNRESET|ETIMEDOUT/i.test(lastError);\n\n      if (attempt < maxRetries && retryable) {\n        await sleep(1500 * attempt);\n        continue;\n      }\n\n      break;\n    }\n  }\n\n  return {\n    response: null,\n    error: lastError || `${strategy} PageSpeed failed`,\n  };\n};\n\nconst score = (category) =>\n  category?.score !== null &&\n  category?.score !== undefined\n    ? Math.round(category.score * 100)\n    : null;\n\nconst summarize = (result, strategy) => {\n  if (!result.response) {\n    return {\n      strategy,\n      performance_score: null,\n      seo_score: null,\n      accessibility_score: null,\n      best_practices_score: null,\n      fcp_ms: null,\n      lcp_ms: null,\n      cls: null,\n      final_url: websiteUrl,\n      error: result.error,\n    };\n  }\n\n  const lighthouse =\n    result.response?.lighthouseResult || {};\n\n  const categories = lighthouse.categories || {};\n  const audits = lighthouse.audits || {};\n\n  return {\n    strategy,\n    performance_score: score(categories.performance),\n    seo_score: score(categories.seo),\n    accessibility_score: score(categories.accessibility),\n    best_practices_score: score(categories['best-practices']),\n    fcp_ms:\n      audits['first-contentful-paint']?.numericValue ?? null,\n    lcp_ms:\n      audits['largest-contentful-paint']?.numericValue ?? null,\n    cls:\n      audits['cumulative-layout-shift']?.numericValue ?? null,\n    final_url: lighthouse.finalUrl || websiteUrl,\n    error: null,\n  };\n};\n\nif (!API_KEY) {\n  return {\n    id: lead.id,\n    business_name: lead.business_name,\n    website_url: websiteUrl,\n    retry_count: lead.retry_count ?? 0,\n    pagespeed_score: null,\n    pagespeed_mobile: null,\n    pagespeed_desktop: null,\n    seo_score: null,\n    mobile_score: null,\n    accessibility_score: null,\n    performance_json: {\n      fetched_at: fetchedAt,\n      error: 'Missing GOOGLE_PSI_KEY or GOOGLE_API_KEY',\n    },\n    pagespeed_error:\n      'Missing GOOGLE_PSI_KEY or GOOGLE_API_KEY',\n  };\n}\n\nif (!websiteUrl) {\n  return {\n    id: lead.id,\n    business_name: lead.business_name,\n    website_url: websiteUrl,\n    retry_count: lead.retry_count ?? 0,\n    pagespeed_score: null,\n    pagespeed_mobile: null,\n    pagespeed_desktop: null,\n    seo_score: null,\n    mobile_score: null,\n    accessibility_score: null,\n    performance_json: {\n      fetched_at: fetchedAt,\n      error: 'No website URL',\n    },\n    pagespeed_error: 'No website URL',\n  };\n}\n\n// Sequential calls to reduce API rate-limit risk\nconst mobileResult = await fetchPageSpeed('mobile');\nconst desktopResult = await fetchPageSpeed('desktop');\n\nconst mobile = summarize(mobileResult, 'mobile');\nconst desktop = summarize(desktopResult, 'desktop');\n\nconst pagespeedMobile = mobile.performance_score;\nconst pagespeedDesktop = desktop.performance_score;\n\nconst errors = [\n  mobile.error ? `mobile: ${mobile.error}` : null,\n  desktop.error ? `desktop: ${desktop.error}` : null,\n].filter(Boolean);\n\nreturn {\n  id: lead.id,\n  business_name: lead.business_name,\n  website_url: websiteUrl,\n  retry_count: lead.retry_count ?? 0,\n\n  // Backward compatibility\n  pagespeed_score:\n    pagespeedMobile ?? pagespeedDesktop,\n  mobile_score: pagespeedMobile,\n\n  // Correct explicit scores\n  pagespeed_mobile: pagespeedMobile,\n  pagespeed_desktop: pagespeedDesktop,\n  seo_score:\n    mobile.seo_score ?? desktop.seo_score,\n  accessibility_score:\n    mobile.accessibility_score ??\n    desktop.accessibility_score,\n\n  performance_json: {\n    fetched_at: fetchedAt,\n    mobile,\n    desktop,\n  },\n\n  pagespeed_error:\n    errors.length === 2\n      ? errors.join(' | ')\n      : null,\n};"
+      },
+      "id": "d1e65a47-44e1-4b16-911f-ca186e12a5d8",
+      "name": "PageSpeed Insights",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        240
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "id",
+        "options": {}
+      },
+      "id": "f7379b62-a7ae-4d99-a266-fbabaf9f2bdc",
+      "name": "Merge Crawl + PageSpeed",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const it = $json;\n\nconst hasScrape =\n  !!(it.raw_html && it.raw_html.length > 100) ||\n  (Number(it.pages_crawled) > 0 && !it.crawl_error);\n\nconst hasPagespeed =\n  it.pagespeed_score !== null && it.pagespeed_score !== undefined;\n\nif (!hasScrape && !hasPagespeed) {\n  const reasons = [];\n  if (it.crawl_error) reasons.push('crawl: ' + it.crawl_error);\n  if (it.pagespeed_error) reasons.push('pagespeed: ' + it.pagespeed_error);\n\n  return {\n    ...it,\n    _hard_fail: true,\n    failure_reason: reasons.length\n      ? reasons.join(' | ')\n      : 'scrape and pagespeed both failed',\n  };\n}\n\nreturn { ...it, _hard_fail: false };"
+      },
+      "id": "9ef19f41-02a9-4b7d-b4da-69aa30844a31",
+      "name": "Validate Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-hard-fail",
+              "leftValue": "={{ $json._hard_fail }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "46f6ef7e-5756-467c-a9c6-d41107b8dbc6",
+      "name": "Hard Fail?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.leads\nSET\n  failure_reason =\n    '{{ (\n      $json.failure_reason ||\n      \"Enrichment failed\"\n    ).replace(/'/g, \"''\") }}',\n\n  retry_count =\n    retry_count + 1,\n\n  status =\n    CASE\n      WHEN retry_count + 1 >=\n        {{ $('config').first().json.maxRetries }}\n      THEN 'enrich_failed'\n      ELSE 'new'\n    END,\n\n  updated_at = NOW()\n\nWHERE id = {{ $json.id }}\n\nRETURNING\n  id,\n  status,\n  retry_count,\n  failure_reason;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "c0123ebc-7eef-4712-b640-63d3dc9f6aba",
+      "name": "Mark Enrich Failed (retry or terminal)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract emails, socials, and structured pain points\n// FR-3.3–3.4, FR-4.4–4.5\n\nconst it = $json;\n\nconst all = String(it.raw_html || '');\nconst base = String(it.website_url || '').trim();\n\n// PageSpeed scores\nconst mobilePs =\n  it.pagespeed_mobile ??\n  it.pagespeed_score ??\n  null;\n\nconst desktopPs =\n  it.pagespeed_desktop ??\n  null;\n\nconst seo =\n  it.seo_score ??\n  null;\n\nconst acc =\n  it.accessibility_score ??\n  it.performance_json?.mobile?.accessibility_score ??\n  null;\n\n// Email extraction\nconst emailRegex =\n  /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\n\nconst blockedEmailParts = [\n  'noreply',\n  'no-reply',\n  'donotreply',\n  'example',\n  '.png',\n  '.jpg',\n  '.jpeg',\n  '.gif',\n  '.svg',\n  '.webp',\n  'sentry',\n  'wixpress',\n  'wordpress',\n  'schema.org',\n  'godaddy',\n];\n\nconst isValidEmail = (email) => {\n  const normalized = String(email || '').toLowerCase();\n\n  return (\n    normalized.length < 100 &&\n    !blockedEmailParts.some((part) =>\n      normalized.includes(part)\n    )\n  );\n};\n\nconst htmlEmails = [\n  ...new Set(all.match(emailRegex) || []),\n].filter(isValidEmail);\n\nconst preExtractedEmails = (\n  Array.isArray(it.raw_emails)\n    ? it.raw_emails\n    : []\n).filter(isValidEmail);\n\nconst emails = [\n  ...new Set([\n    ...htmlEmails,\n    ...preExtractedEmails,\n  ]),\n];\n\nconst priorityPrefixes = [\n  'contact',\n  'info',\n  'hello',\n  'sales',\n  'support',\n  'admin',\n  'office',\n];\n\nconst email =\n  emails.find((candidate) =>\n    priorityPrefixes.some((prefix) =>\n      candidate.toLowerCase().startsWith(prefix)\n    )\n  ) ??\n  emails[0] ??\n  null;\n\n// Social URL extraction\nconst extractSocialUrl = (regex, junkPaths = []) => {\n  const matches = all.match(regex) || [];\n\n  for (const match of matches) {\n    const clean = match\n      .replace(/[\"'>].*$/, '')\n      .split('?')[0]\n      .replace(/\\/$/, '');\n\n    const path = clean\n      .split('/')\n      .slice(3)\n      .join('/');\n\n    if (path.length < 3) {\n      continue;\n    }\n\n    if (\n      junkPaths.some((junkPath) =>\n        clean.toLowerCase().includes(\n          junkPath.toLowerCase()\n        )\n      )\n    ) {\n      continue;\n    }\n\n    return clean;\n  }\n\n  return null;\n};\n\nconst junkSocialPaths = [\n  'sharer',\n  'share',\n  '/tr',\n  'plugins',\n  'dialog',\n  'login',\n];\n\nconst facebook_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?facebook\\.com\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\nconst instagram_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?instagram\\.com\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\nconst twitter_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?(twitter|x)\\.com\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\nconst linkedin_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?linkedin\\.com\\/(company|in)\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\n// Clean website text\nconst scraped_html = all\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s{2,}/g, ' ')\n  .trim()\n  .slice(0, 3000);\n\n// Website checks\nconst has_https =\n  base.toLowerCase().startsWith('https://');\n\nconst has_viewport =\n  /<meta[^>]+viewport/i.test(all);\n\nconst has_meta_description =\n  /<meta[^>]+name=[\"']description[\"'][^>]*content=[\"'][^\"']+[\"']/i.test(\n    all\n  );\n\nconst titleMatch =\n  all.match(/<title[^>]*>([^<]*)<\\/title>/i);\n\nconst has_title =\n  Boolean(titleMatch?.[1]?.trim());\n\nconst imageCount =\n  (all.match(/<img\\b/gi) || []).length;\n\nconst imagesWithoutAlt =\n  (\n    all.match(\n      /<img\\b(?:(?!alt=)[^>])*>/gi\n    ) || []\n  ).length;\n\nconst has_contact_form =\n  /<form/i.test(all);\n\nconst copyrightYear =\n  (\n    all.match(\n      /(?:©|&copy;|copyright)[^0-9]{0,12}(20\\d{2})/i\n    ) || []\n  )[1] || null;\n\nconst stale_copyright =\n  copyrightYear\n    ? new Date().getFullYear() -\n        Number(copyrightYear) >=\n      2\n    : false;\n\nconst word_count = scraped_html\n  .split(/\\s+/)\n  .filter(Boolean)\n  .length;\n\nconst social_count = [\n  linkedin_url,\n  facebook_url,\n  instagram_url,\n  twitter_url,\n].filter(Boolean).length;\n\n// Structured pain points\nconst addPain = (\n  area,\n  problem,\n  solution,\n  severity\n) => ({\n  area,\n  problem,\n  solution,\n  severity,\n});\n\nconst pain_points = [];\n\nif (mobilePs !== null && mobilePs < 60) {\n  pain_points.push(\n    addPain(\n      'performance',\n      `Mobile PageSpeed score is ${mobilePs}/100`,\n      'Mobile speed optimization and responsive improvements',\n      mobilePs < 40 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (desktopPs !== null && desktopPs < 70) {\n  pain_points.push(\n    addPain(\n      'performance',\n      `Desktop PageSpeed score is ${desktopPs}/100`,\n      'Desktop performance, caching, and asset optimization',\n      desktopPs < 50 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (seo !== null && seo < 70) {\n  pain_points.push(\n    addPain(\n      'seo',\n      `SEO score is ${seo}/100`,\n      'On-page SEO fixes: meta tags, structure, and content optimization',\n      seo < 50 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (acc !== null && acc < 70) {\n  pain_points.push(\n    addPain(\n      'accessibility',\n      `Accessibility score is ${acc}/100`,\n      'Accessibility and mobile UX improvements',\n      acc < 50 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (!has_https) {\n  pain_points.push(\n    addPain(\n      'security',\n      'Site is not served over HTTPS',\n      'SSL certificate setup and HTTPS migration',\n      'high'\n    )\n  );\n}\n\nif (!has_viewport) {\n  pain_points.push(\n    addPain(\n      'ux',\n      'Missing mobile viewport meta tag',\n      'Responsive design and mobile optimization',\n      'high'\n    )\n  );\n}\n\nif (!has_meta_description) {\n  pain_points.push(\n    addPain(\n      'seo',\n      'Missing meta description',\n      'SEO meta tag optimization',\n      'medium'\n    )\n  );\n}\n\nif (!has_title) {\n  pain_points.push(\n    addPain(\n      'seo',\n      'Missing or empty page title',\n      'Title tag optimization',\n      'medium'\n    )\n  );\n}\n\nif (\n  imageCount > 0 &&\n  imagesWithoutAlt / imageCount > 0.5\n) {\n  pain_points.push(\n    addPain(\n      'seo',\n      `${imagesWithoutAlt} of ${imageCount} images are missing alt text`,\n      'Image alt-text audit and remediation',\n      'low'\n    )\n  );\n}\n\nif (stale_copyright) {\n  pain_points.push(\n    addPain(\n      'content',\n      `Outdated copyright year (${copyrightYear})`,\n      'Website content refresh',\n      'low'\n    )\n  );\n}\n\nif (word_count < 150) {\n  pain_points.push(\n    addPain(\n      'content',\n      `Thin content (${word_count} words)`,\n      'Content expansion with clear service messaging',\n      'medium'\n    )\n  );\n}\n\nif (!has_contact_form) {\n  pain_points.push(\n    addPain(\n      'ux',\n      'No contact form found',\n      'Lead capture form and stronger CTA',\n      'medium'\n    )\n  );\n}\n\nif (social_count === 0) {\n  pain_points.push(\n    addPain(\n      'social_presence',\n      'No social profiles linked from website',\n      'Social profile setup and cross-linking',\n      'low'\n    )\n  );\n}\n\n// Crawl metadata\nconst pagesVisited = [\n  ...new Set(\n    Array.isArray(it.pages_found) &&\n    it.pages_found.length\n      ? it.pages_found\n      : ['/']\n  ),\n];\n\nconst crawl_metadata = {\n  pages_visited: pagesVisited,\n  pages_crawled:\n    Number(it.pages_crawled) || 0,\n  crawled_at:\n    it.crawled_at ||\n    new Date().toISOString(),\n  crawl_error:\n    it.crawl_error || null,\n  pagespeed_error:\n    it.pagespeed_error || null,\n};\n\n// Final output\nreturn {\n  id: it.id,\n  business_name: it.business_name,\n  website_url: base,\n  retry_count:\n    Number(it.retry_count) || 0,\n\n  email_found: Boolean(email),\n  email,\n  facebook_url,\n  instagram_url,\n  twitter_url,\n  linkedin_url,\n\n  pagespeed_score: mobilePs,\n  pagespeed_mobile: mobilePs,\n  pagespeed_desktop: desktopPs,\n  seo_score: seo,\n  mobile_score: mobilePs,\n  accessibility_score: acc,\n\n  performance_json:\n    it.performance_json || null,\n\n  pain_points,\n  scraped_html,\n\n  pages_crawled:\n    Number(it.pages_crawled) || 0,\n\n  crawl_metadata,\n\n  scraperapi_calls:\n    Number(it.scraperapi_calls) || 0,\n};"
+      },
+      "id": "e39a72c5-64e2-4315-b919-a007720ad3db",
+      "name": "Extract Contacts & Pain Points",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-email",
               "leftValue": "={{ $json.email_found }}",
               "rightValue": "",
               "operator": {
@@ -952,20 +342,325 @@
         },
         "options": {}
       },
-      "id": "3ad4147a-2a88-4732-981c-a876213f4743",
+      "id": "4d1576b1-eb0c-4148-93e9-db39f89a50e8",
       "name": "Email Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -240,
-        528
+        240,
+        240
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.leads\nSET\n  email =\n    '{{ ($json.email || \"\").replace(/'/g, \"''\") }}',\n\n  facebook_url =\n    {{ $json.facebook_url\n      ? \"'\" + String($json.facebook_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  instagram_url =\n    {{ $json.instagram_url\n      ? \"'\" + String($json.instagram_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  linkedin_url =\n    {{ $json.linkedin_url\n      ? \"'\" + String($json.linkedin_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  twitter_url =\n    {{ $json.twitter_url\n      ? \"'\" + String($json.twitter_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  pagespeed_score =\n    {{ $json.pagespeed_score ?? \"NULL\" }},\n\n  pagespeed_mobile =\n    {{ $json.pagespeed_mobile ?? \"NULL\" }},\n\n  pagespeed_desktop =\n    {{ $json.pagespeed_desktop ?? \"NULL\" }},\n\n  seo_score =\n    {{ $json.seo_score ?? \"NULL\" }},\n\n  mobile_score =\n    {{ $json.mobile_score ?? \"NULL\" }},\n\n  performance_json =\n    {{ $json.performance_json\n      ? \"'\" +\n        JSON.stringify($json.performance_json)\n          .replace(/'/g, \"''\") +\n        \"'::jsonb\"\n      : \"NULL\"\n    }},\n\n  pain_points =\n    '{{ JSON.stringify(\n      $json.pain_points || []\n    ).replace(/'/g, \"''\") }}'::jsonb,\n\n  scraped_html =\n    '{{ ($json.scraped_html || \"\")\n      .replace(/'/g, \"''\") }}',\n\n  pages_crawled =\n    {{ Number($json.pages_crawled) || 0 }},\n\n  crawl_metadata =\n    '{{ JSON.stringify(\n      $json.crawl_metadata || {}\n    ).replace(/'/g, \"''\") }}'::jsonb,\n\n  scraperapi_calls =\n    {{ Number($json.scraperapi_calls) || 0 }},\n\n  status = 'enriched',\n  failure_reason = NULL,\n  enriched_at = NOW(),\n  updated_at = NOW()\n\nWHERE id = {{ $json.id }}\n\nRETURNING\n  id,\n  status,\n  pagespeed_mobile,\n  pagespeed_desktop;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "3e670289-2599-4a5a-816c-12771328879b",
+      "name": "Mark Enriched",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        160
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.leads\nSET\n  email = NULL,\n\n  facebook_url =\n    {{ $json.facebook_url\n      ? \"'\" + String($json.facebook_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  instagram_url =\n    {{ $json.instagram_url\n      ? \"'\" + String($json.instagram_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  linkedin_url =\n    {{ $json.linkedin_url\n      ? \"'\" + String($json.linkedin_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  twitter_url =\n    {{ $json.twitter_url\n      ? \"'\" + String($json.twitter_url).replace(/'/g, \"''\") + \"'\"\n      : \"NULL\"\n    }},\n\n  pagespeed_score =\n    {{ $json.pagespeed_score ?? \"NULL\" }},\n\n  pagespeed_mobile =\n    {{ $json.pagespeed_mobile ?? \"NULL\" }},\n\n  pagespeed_desktop =\n    {{ $json.pagespeed_desktop ?? \"NULL\" }},\n\n  seo_score =\n    {{ $json.seo_score ?? \"NULL\" }},\n\n  mobile_score =\n    {{ $json.mobile_score ?? \"NULL\" }},\n\n  performance_json =\n    {{ $json.performance_json\n      ? \"'\" +\n        JSON.stringify($json.performance_json)\n          .replace(/'/g, \"''\") +\n        \"'::jsonb\"\n      : \"NULL\"\n    }},\n\n  pain_points =\n    '{{ JSON.stringify(\n      $json.pain_points || []\n    ).replace(/'/g, \"''\") }}'::jsonb,\n\n  scraped_html =\n    '{{ ($json.scraped_html || \"\")\n      .replace(/'/g, \"''\") }}',\n\n  pages_crawled =\n    {{ Number($json.pages_crawled) || 0 }},\n\n  crawl_metadata =\n    '{{ JSON.stringify(\n      $json.crawl_metadata || {}\n    ).replace(/'/g, \"''\") }}'::jsonb,\n\n  scraperapi_calls =\n    {{ Number($json.scraperapi_calls) || 0 }},\n\n  status = 'no_email',\n\n  failure_reason =\n    '{{ (\n      $json.crawl_metadata &&\n      $json.crawl_metadata.crawl_error\n        ? \"Crawl error: \" +\n          $json.crawl_metadata.crawl_error\n        : \"No contact email found on crawled website pages\"\n    ).replace(/'/g, \"''\") }}',\n\n  enriched_at = NOW(),\n  updated_at = NOW()\n\nWHERE id = {{ $json.id }}\n\nRETURNING\n  id,\n  status,\n  pagespeed_mobile,\n  pagespeed_desktop;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "bc1e06ff-9445-4993-8ee8-12e28e961dce",
+      "name": "Mark No Email",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        480,
+        320
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (workflow_name, run_at, leads_processed, leads_failed, duration_ms, notes) VALUES ('{{ $json.workflow_name }}', NOW(), {{ $json.leads_processed }}, {{ $json.leads_failed }}, {{ $json.duration_ms }}, '{{ $json.notes.replace(/'/g, \"''\") }}');",
+        "options": {}
+      },
+      "id": "261bd276-71d4-4798-857f-558c91e0c648",
+      "name": "Log Run to workflow_logs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1200,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const errorItem = $json;\n\nlet loopLead = {};\n\ntry {\n  loopLead = $('Loop Leads').item.json || {};\n} catch (_error) {\n  loopLead = {};\n}\n\nconst leadId =\n  errorItem.id ??\n  loopLead.id ??\n  null;\n\nconst errorMessage =\n  errorItem.error?.message ??\n  errorItem.error?.description ??\n  errorItem.failure_reason ??\n  'Unexpected workflow error during enrichment';\n\nreturn {\n  id: leadId,\n  failure_reason: String(errorMessage),\n};"
+      },
+      "id": "af4ceebc-4050-4ab8-ad1f-7ec36d880c2f",
+      "name": "Normalize Error Item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n)\nVALUES (\n  'enrichment_error',\n  NOW(),\n  0,\n  1,\n  0,\n  'lead_id={{\n    $json.id ||\n    $(\"Loop Leads\").item.json.id ||\n    \"unknown\"\n  }} | {{\n    (\n      $json.failure_reason ||\n      \"Unhandled enrichment error\"\n    ).replace(/'/g, \"''\")\n  }}'\n)\nRETURNING id;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "56ba8a0b-0dc0-457b-a01f-a9a27798bf18",
+      "name": "Log Error to workflow_logs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -192,
+        480
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.leads\nSET\n  failure_reason =\n    '{{ (\n      $json.failure_reason ||\n      \"Unexpected workflow error during enrichment\"\n    ).replace(/'/g, \"''\") }}',\n\n  retry_count =\n    retry_count + 1,\n\n  status =\n    CASE\n      WHEN retry_count + 1 >=\n        {{ $('config').first().json.maxRetries }}\n      THEN 'enrich_failed'\n      ELSE 'new'\n    END,\n\n  updated_at = NOW()\n\nWHERE id = {{ $json.id }}\n  AND status = 'enriching'\n\nRETURNING\n  id,\n  status,\n  retry_count,\n  failure_reason;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "83c45c35-7aa3-4bac-a5aa-5b749a374fe3",
+      "name": "Recover Stuck Enriching Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -432,
+        480
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Run Summary — safe when Mark nodes skip (n8n 2.x)\nconst cfg = $('config').first().json;\n\nconst safeAll = (nodeName) => {\n  try {\n    return $(nodeName).all();\n  } catch (e) {\n    return [];\n  }\n};\n\nconst enriched = safeAll('Mark Enriched');\nconst noEmail = safeAll('Mark No Email');\nconst failed = safeAll('Mark Enrich Failed (retry or terminal)');\n\nconst successCount = enriched.length;\nconst noEmailCount = noEmail.length;\nconst failedCount = failed.length;\n\nconst leadIds = [...enriched, ...noEmail, ...failed]\n  .map((i) => i.json.id)\n  .filter(Boolean)\n  .join(',');\n\nconst start = new Date(cfg.runStartTs).getTime();\nconst durationMs = Number.isFinite(start) ? Date.now() - start : 0;\n\nreturn [{\n  json: {\n    workflow_name: cfg.workflowName || 'enrichment',\n    leads_processed: successCount + noEmailCount,\n    leads_failed: failedCount,\n    duration_ms: durationMs,\n    notes:\n      'WF2 enrichment | enriched=' + successCount +\n      ' no_email=' + noEmailCount +\n      ' failed=' + failedCount +\n      ' | batch_ids: ' + (leadIds || 'none'),\n  },\n}];"
+      },
+      "id": "82bb731e-bde6-44f9-957f-50125e9a00ce",
+      "name": "Prepare Run Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH recovered AS (\n  UPDATE public.leads\n  SET\n    retry_count = retry_count + 1,\n    status = CASE\n      WHEN retry_count + 1 >= {{ $('config').first().json.maxRetries }}\n        THEN 'enrich_failed'\n      ELSE 'new'\n    END,\n    failure_reason = CASE\n      WHEN retry_count + 1 >= {{ $('config').first().json.maxRetries }}\n        THEN 'Enrichment timed out after 20 minutes'\n      ELSE 'Recovered stale enrichment; retry scheduled'\n    END,\n    updated_at = NOW()\n  WHERE status = 'enriching'\n    AND updated_at < NOW() - INTERVAL '20 minutes'\n  RETURNING status\n)\nSELECT\n  COUNT(*) AS recovered_count,\n  COUNT(*) FILTER (\n    WHERE status = 'enrich_failed'\n  ) AS terminal_failed_count\nFROM recovered;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1680,
+        272
+      ],
+      "id": "6eb170b1-0c66-4e41-b0e3-8ce7c90ed08c",
+      "name": "Reset Stale Enriching Leads",
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1280,
+        48
+      ],
+      "id": "a3cb9857-f7cb-4959-a3c2-8067e5ccf7af",
+      "name": "Loop Leads"
     }
   ],
   "pinData": {},
   "connections": {
-    "Merge (A + B by position)": {
+    "Schedule — Every 10 Minutes": {
       "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Test)": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "config": {
+      "main": [
+        [
+          {
+            "node": "Reset Stale Enriching Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Leads (lock + mark enriching)": {
+      "main": [
+        [
+          {
+            "node": "Any Leads to Enrich?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads to Enrich?": {
+      "main": [
+        [
+          {
+            "node": "Loop Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Empty Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Website": {
+      "main": [
+        [
+          {
+            "node": "Merge Crawl + PageSpeed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Error Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed Insights": {
+      "main": [
+        [
+          {
+            "node": "Merge Crawl + PageSpeed",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Normalize Error Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Crawl + PageSpeed": {
+      "main": [
+        [
+          {
+            "node": "Validate Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Hard Fail?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hard Fail?": {
+      "main": [
+        [
+          {
+            "node": "Mark Enrich Failed (retry or terminal)",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Extract Contacts & Pain Points",
@@ -986,8 +681,126 @@
         ]
       ]
     },
-    "Claim Leads (lock + mark enriching)1": {
+    "Email Found?": {
       "main": [
+        [
+          {
+            "node": "Mark Enriched",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark No Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Enriched": {
+      "main": [
+        [
+          {
+            "node": "Loop Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark No Email": {
+      "main": [
+        [
+          {
+            "node": "Loop Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Error Item": {
+      "main": [
+        [
+          {
+            "node": "Recover Stuck Enriching Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recover Stuck Enriching Lead": {
+      "main": [
+        [
+          {
+            "node": "Log Error to workflow_logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Enrich Failed (retry or terminal)": {
+      "main": [
+        [
+          {
+            "node": "Loop Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Run Summary": {
+      "main": [
+        [
+          {
+            "node": "Log Run to workflow_logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Empty Run": {
+      "main": [
+        []
+      ]
+    },
+    "Reset Stale Enriching Leads": {
+      "main": [
+        [
+          {
+            "node": "Claim Leads (lock + mark enriching)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error to workflow_logs": {
+      "main": [
+        [
+          {
+            "node": "Loop Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Leads": {
+      "main": [
+        [
+          {
+            "node": "Prepare Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Crawl Website",
@@ -995,69 +808,7 @@
             "index": 0
           },
           {
-            "node": "Page speed insights",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "config": {
-      "main": [
-        [
-          {
-            "node": "Claim Leads (lock + mark enriching)1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "When clicking ‘Execute workflow’": {
-      "main": [
-        [
-          {
-            "node": "config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Crawl Website": {
-      "main": [
-        [
-          {
-            "node": "Merge (A + B by position)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Page speed insights": {
-      "main": [
-        [
-          {
-            "node": "Merge (A + B by position)",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Email Found?": {
-      "main": [
-        [
-          {
-            "node": "Mark Enriched1",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Mark No Email1",
+            "node": "PageSpeed Insights",
             "type": "main",
             "index": 0
           }
@@ -1068,13 +819,15 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "versionId": "262d92c6-24f6-4f08-83ae-0b98f40db7e5",
+  "versionId": "b0affc17-ea05-483e-a949-8d768fa46a78",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "933ee548882e2bf7f6061bb633a848971fa7d2effc1105936df88a0b977476f1"
+    "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"
   },
-  "id": "fX9R4JgN6gwTeCFL",
+  "nodeGroups": [],
+  "id": "TeElaMa2VTIzewJb",
   "tags": []
 }

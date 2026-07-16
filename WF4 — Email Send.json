@@ -1,0 +1,586 @@
+{
+  "name": "WF4 — Email Send",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "44444444-4444-4444-4444-444444444401",
+      "name": "Schedule Trigger — Every 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1680, 400]
+    },
+    {
+      "parameters": {},
+      "id": "44444444-4444-4444-4444-444444444402",
+      "name": "Manual Trigger (Test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-1680, 560]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-batch",
+              "name": "batchSize",
+              "type": "number",
+              "value": 20
+            },
+            {
+              "id": "cfg-workflow",
+              "name": "workflowName",
+              "type": "string",
+              "value": "email_send"
+            },
+            {
+              "id": "cfg-from-email",
+              "name": "fromEmail",
+              "type": "string",
+              "value": "={{ $env.SMTP_FROM_EMAIL || 'sales@yourdomain.com' }}"
+            },
+            {
+              "id": "cfg-from-name",
+              "name": "fromName",
+              "type": "string",
+              "value": "={{ $env.SMTP_FROM_NAME || $env.AGENCY_NAME || 'Atrium Solution' }}"
+            },
+            {
+              "id": "cfg-start",
+              "name": "runStartTs",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444403",
+      "name": "config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1440, 480]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads l\nSET\n  status = 'approved',\n  updated_at = NOW(),\n  failure_reason = 'Recovered after an interrupted email send'\nWHERE l.status = 'sending'\n  AND l.updated_at < NOW() - INTERVAL '30 minutes'\n  AND NOT EXISTS (\n    SELECT 1\n    FROM email_logs el\n    WHERE el.lead_id = l.id\n      AND el.status = 'sent'\n  );",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444404",
+      "name": "Postgres — Recover Stuck Sends",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-1200, 480],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH picked AS (\n  SELECT\n    l.id,\n    l.business_name,\n    l.email,\n    l.campaign_id,\n    d.id AS draft_id,\n    d.subject AS email_subject,\n    d.body AS email_body\n  FROM leads l\n  JOIN LATERAL (\n    SELECT ed.id, ed.subject, ed.body\n    FROM email_drafts ed\n    WHERE ed.lead_id = l.id\n      AND ed.status = 'approved'\n    ORDER BY ed.updated_at DESC, ed.id DESC\n    LIMIT 1\n  ) d ON TRUE\n  WHERE l.status = 'approved'\n    AND l.email IS NOT NULL\n    AND TRIM(l.email) <> ''\n    AND NOT EXISTS (\n      SELECT 1\n      FROM email_logs own_log\n      WHERE own_log.lead_id = l.id\n        AND own_log.status = 'sent'\n    )\n    AND NOT EXISTS (\n      SELECT 1\n      FROM leads other\n      JOIN email_logs sent_log\n        ON sent_log.lead_id = other.id\n       AND sent_log.status = 'sent'\n      WHERE other.campaign_id = l.campaign_id\n        AND other.id <> l.id\n        AND (\n          LOWER(TRIM(other.email)) = LOWER(TRIM(l.email))\n          OR LOWER(TRIM(other.business_name)) = LOWER(TRIM(l.business_name))\n        )\n    )\n  ORDER BY l.audited_at ASC NULLS LAST, l.updated_at ASC\n  LIMIT {{ $('config').first().json.batchSize }}\n  FOR UPDATE OF l SKIP LOCKED\n), claimed AS (\n  UPDATE leads l\n  SET\n    status = 'sending',\n    failure_reason = NULL,\n    updated_at = NOW()\n  FROM picked p\n  WHERE l.id = p.id\n  RETURNING l.id\n)\nSELECT\n  p.id,\n  p.business_name,\n  p.email,\n  p.campaign_id,\n  p.draft_id,\n  p.email_subject,\n  p.email_body\nFROM picked p\nJOIN claimed c ON c.id = p.id;",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444405",
+      "name": "Postgres — Fetch & Claim Approved Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-960, 480],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-id-wf4",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444406",
+      "name": "IF — Has Approved Leads",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-720, 480]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n) VALUES (\n  'email_send',\n  NOW(),\n  0,\n  0,\n  0,\n  'no approved email drafts in queue'\n);",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444407",
+      "name": "Postgres — Log Empty Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-480, 640],
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444408",
+      "name": "Split in Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-480, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const email = String($json.email || '').trim();\nconst subject = String($json.email_subject || '').trim();\nconst body = String($json.email_body || '').trim();\nconst emailValid = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(email);\nconst contentValid = subject.length > 0 && body.length > 0;\n\nreturn [{\n  json: {\n    ...$json,\n    email,\n    email_valid: emailValid && contentValid,\n    validation_error: !emailValid\n      ? 'Invalid recipient email address'\n      : (!contentValid ? 'Approved email subject or body is empty' : null)\n  }\n}];"
+      },
+      "id": "44444444-4444-4444-4444-444444444409",
+      "name": "Code — Validate Approved Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-240, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-email-valid-wf4",
+              "leftValue": "={{ $json.email_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444410",
+      "name": "IF — Email Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [0, 320]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('config').first().json.fromName + ' <' + $('config').first().json.fromEmail + '>' }}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.email_body }}",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444411",
+      "name": "SMTP — Send Approved Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [240, 240],
+      "continueOnFail": true,
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_SMTP_CREDENTIAL_ID",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $('Code — Validate Approved Email').item.json;\nconst errorValue = $json.error;\nconst sendSuccess = !errorValue;\nlet smtpResponse;\n\nif (sendSuccess) {\n  try {\n    smtpResponse = JSON.stringify($json || {}).slice(0, 2000);\n  } catch (_e) {\n    smtpResponse = 'SMTP accepted the message';\n  }\n} else {\n  smtpResponse = String(errorValue.message || errorValue.description || errorValue).slice(0, 2000);\n}\n\nreturn [{\n  json: {\n    ...lead,\n    send_success: sendSuccess,\n    smtp_response: smtpResponse || (sendSuccess ? 'SMTP accepted the message' : 'Unknown SMTP error'),\n    send_error: sendSuccess ? null : (smtpResponse || 'Unknown SMTP error')\n  }\n}];"
+      },
+      "id": "44444444-4444-4444-4444-444444444412",
+      "name": "Code — Normalize SMTP Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-send-success-wf4",
+              "leftValue": "={{ $json.send_success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444413",
+      "name": "IF — Send Succeeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [720, 240]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH lead_updated AS (\n  UPDATE leads\n  SET\n    status = 'sent',\n    sent_at = NOW(),\n    failure_reason = NULL,\n    updated_at = NOW()\n  WHERE id = {{ $json.id }}\n    AND status = 'sending'\n  RETURNING id\n), draft_updated AS (\n  UPDATE email_drafts\n  SET\n    status = 'sent',\n    updated_at = NOW()\n  WHERE id = {{ $json.draft_id }}\n    AND status = 'approved'\n  RETURNING id\n)\nINSERT INTO email_logs (\n  lead_id,\n  draft_id,\n  email_to,\n  email_subject,\n  email_body,\n  status,\n  smtp_response,\n  sent_at\n)\nSELECT\n  {{ $json.id }},\n  {{ $json.draft_id }},\n  '{{ $json.email.replace(/'/g, \"''\") }}',\n  '{{ $json.email_subject.replace(/'/g, \"''\") }}',\n  '{{ $json.email_body.replace(/'/g, \"''\") }}',\n  'sent',\n  '{{ $json.smtp_response.replace(/'/g, \"''\") }}',\n  NOW()\nFROM lead_updated\nWHERE EXISTS (SELECT 1 FROM draft_updated);",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444414",
+      "name": "Postgres — Mark Sent & Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [960, 120],
+      "continueOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH lead_updated AS (\n  UPDATE leads\n  SET\n    status = 'send_failed',\n    retry_count = retry_count + 1,\n    failure_reason = '{{ ($json.send_error || \"Unknown SMTP error\").replace(/'/g, \"''\") }}',\n    updated_at = NOW()\n  WHERE id = {{ $json.id }}\n    AND status = 'sending'\n  RETURNING id\n)\nINSERT INTO email_logs (\n  lead_id,\n  draft_id,\n  email_to,\n  email_subject,\n  email_body,\n  status,\n  smtp_response,\n  sent_at\n)\nSELECT\n  {{ $json.id }},\n  {{ $json.draft_id }},\n  '{{ $json.email.replace(/'/g, \"''\") }}',\n  '{{ $json.email_subject.replace(/'/g, \"''\") }}',\n  '{{ $json.email_body.replace(/'/g, \"''\") }}',\n  'failed',\n  '{{ ($json.send_error || \"Unknown SMTP error\").replace(/'/g, \"''\") }}',\n  NOW()\nFROM lead_updated;",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444415",
+      "name": "Postgres — Mark send_failed & Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [960, 360],
+      "continueOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH lead_updated AS (\n  UPDATE leads\n  SET\n    status = 'send_failed',\n    retry_count = retry_count + 1,\n    failure_reason = '{{ ($json.validation_error || \"Invalid approved email\").replace(/'/g, \"''\") }}',\n    updated_at = NOW()\n  WHERE id = {{ $json.id }}\n    AND status = 'sending'\n  RETURNING id\n)\nINSERT INTO email_logs (\n  lead_id,\n  draft_id,\n  email_to,\n  email_subject,\n  email_body,\n  status,\n  smtp_response,\n  sent_at\n)\nSELECT\n  {{ $json.id }},\n  {{ $json.draft_id }},\n  '{{ ($json.email || \"\").replace(/'/g, \"''\") }}',\n  '{{ ($json.email_subject || \"\").replace(/'/g, \"''\") }}',\n  '{{ ($json.email_body || \"\").replace(/'/g, \"''\") }}',\n  'failed',\n  '{{ ($json.validation_error || \"Invalid approved email\").replace(/'/g, \"''\") }}',\n  NOW()\nFROM lead_updated;",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444416",
+      "name": "Postgres — Reject Invalid Email & Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [240, 480],
+      "continueOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('config').first().json;\nconst start = new Date(cfg.runStartTs).getTime();\nconst durationMs = Number.isFinite(start) ? Date.now() - start : 0;\n\nreturn [{\n  json: {\n    run_start_ts: cfg.runStartTs,\n    duration_ms: durationMs,\n    notes: 'WF4 email_send batch completed at ' + new Date().toISOString()\n  }\n}];",
+        "executeOnce": true
+      },
+      "id": "44444444-4444-4444-4444-444444444417",
+      "name": "Code — Summarize Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 720],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n)\nSELECT\n  'email_send',\n  NOW(),\n  COUNT(*) FILTER (WHERE status = 'sent' AND updated_at >= '{{ $json.run_start_ts }}'::timestamptz),\n  COUNT(*) FILTER (WHERE status = 'send_failed' AND updated_at >= '{{ $json.run_start_ts }}'::timestamptz),\n  {{ $json.duration_ms }},\n  '{{ $json.notes.replace(/'/g, \"''\") }}'\nFROM leads;",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444418",
+      "name": "Postgres — Workflow Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [240, 720],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "7SbKHyrjW8tGkhcu",
+          "name": "Postgres account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger — Every 30 min": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Test)": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "config": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Recover Stuck Sends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Recover Stuck Sends": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Fetch & Claim Approved Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Fetch & Claim Approved Leads": {
+      "main": [
+        [
+          {
+            "node": "IF — Has Approved Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Has Approved Leads": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Log Empty Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split in Batches": {
+      "main": [
+        [
+          {
+            "node": "Code — Validate Approved Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code — Summarize Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Validate Approved Email": {
+      "main": [
+        [
+          {
+            "node": "IF — Email Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Email Valid": {
+      "main": [
+        [
+          {
+            "node": "SMTP — Send Approved Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Reject Invalid Email & Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMTP — Send Approved Email": {
+      "main": [
+        [
+          {
+            "node": "Code — Normalize SMTP Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Normalize SMTP Result": {
+      "main": [
+        [
+          {
+            "node": "IF — Send Succeeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Send Succeeded": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Mark Sent & Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Mark send_failed & Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Mark Sent & Log": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Mark send_failed & Log": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Reject Invalid Email & Log": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Summarize Run": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Workflow Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "wf4-email-send-v1-atrium-2026",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"
+  },
+  "nodeGroups": [],
+  "id": "",
+  "tags": []
+}
