@@ -1,0 +1,54 @@
+import { query } from "@/lib/db";
+import type { Campaign } from "@/types";
+import CampaignsTable from "@/components/campaigns/CampaignsTable";
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+
+async function getCampaigns() {
+  try {
+    const rows = await query<Campaign>(
+      `SELECT id, business_type, city, status,
+              leads_found, leads_inserted, created_at
+       FROM campaigns
+       WHERE business_type IS NOT NULL
+         AND business_type <> ''
+         AND city IS NOT NULL
+         AND city <> ''
+       ORDER BY id DESC
+       LIMIT 50`
+    );
+    return { ok: true as const, campaigns: rows };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { ok: false as const, error: message };
+  }
+}
+
+export default async function CampaignsPage() {
+  const result = await getCampaigns();
+
+  return (
+    <main className="fade-in">
+      <div className="page-head">
+        <div>
+          <p className="eyebrow">Data</p>
+          <h1>Campaigns</h1>
+          <p className="muted">Search history and results — table only</p>
+        </div>
+        <Link href="/find-leads" className="btn-primary-link">
+          + Find Leads
+        </Link>
+      </div>
+
+      {!result.ok && (
+        <div className="card error-box">
+          <strong>Could not load campaigns</strong>
+          <p>{result.error}</p>
+        </div>
+      )}
+
+      {result.ok && <CampaignsTable campaigns={result.campaigns} />}
+    </main>
+  );
+}
