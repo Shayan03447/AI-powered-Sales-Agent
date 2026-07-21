@@ -7,34 +7,39 @@ export default function HomePage() {
         <p className="eyebrow">Atrium Solution</p>
         <h1>Atrium Reach</h1>
         <p className="lede">
-          Your outbound workspace — find local businesses, research websites,
-          track campaigns, and review every lead.
+          Find businesses, research websites, draft AI emails, and track every
+          lead in one workspace.
         </p>
         <div className="hero-actions">
           <Link href="/find-leads" className="btn-primary-link">
             Start Find Leads
           </Link>
-          <Link href="/research" className="btn-secondary-link">
-            Start Research
+          <Link href="/ai-draft" className="btn-secondary-link">
+            Create AI Emails
           </Link>
         </div>
       </section>
 
-      <section className="action-grid">
+      <section className="action-grid action-grid-4">
         <Link href="/find-leads" className="action-tile">
           <span className="tile-step">01</span>
           <h2>Find Leads</h2>
-          <p>Enter business type and city to start a new search.</p>
+          <p>Search by business type and city.</p>
         </Link>
         <Link href="/research" className="action-tile">
           <span className="tile-step">02</span>
           <h2>Research</h2>
-          <p>Enrich new leads — find emails and website scores.</p>
+          <p>Find emails and website scores.</p>
         </Link>
-        <Link href="/leads" className="action-tile">
+        <Link href="/ai-draft" className="action-tile">
           <span className="tile-step">03</span>
-          <h2>Leads</h2>
-          <p>Browse saved businesses, emails, status, and scores.</p>
+          <h2>AI Draft</h2>
+          <p>Generate audit + personalized emails.</p>
+        </Link>
+        <Link href="/drafts" className="action-tile">
+          <span className="tile-step">04</span>
+          <h2>Drafts</h2>
+          <p>Review AI email drafts and audits.</p>
         </Link>
       </section>
     </main>

@@ -96,3 +96,25 @@ export async function triggerWf2(options?: {
     started_at: new Date().toISOString(),
   });
 }
+
+/**
+ * WF3 — AI Audit + Email Draft
+ * Picks status=enriched leads with email → pending_review
+ */
+export async function triggerWf3(options?: {
+  batchSize?: number;
+}): Promise<{ ok: boolean; status: number; body: string }> {
+  const url = process.env.N8N_WF3_WEBHOOK_URL?.trim();
+
+  if (!url) {
+    throw new Error(
+      "Add N8N_WF3_WEBHOOK_URL in .env.local — see PART_4_TEST.md"
+    );
+  }
+
+  return postJson(url, {
+    trigger: "dashboard",
+    batchSize: options?.batchSize ?? 3,
+    started_at: new Date().toISOString(),
+  });
+}

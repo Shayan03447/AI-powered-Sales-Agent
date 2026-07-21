@@ -195,6 +195,10 @@ a {
   gap: 14px;
 }
 
+.action-grid-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .action-tile {
   display: block;
   text-decoration: none;
@@ -407,13 +411,58 @@ button:disabled {
   color: var(--ok);
 }
 
-.badge-running,
-.badge-enriching,
-.badge-auditing,
-.badge-new {
+.badge-pending_review {
+  background: #e8f0ff;
+  border-color: #b7c9f0;
+  color: #2a4a8c;
+}
+
+.badge-auditing {
   background: var(--warn-bg);
   border-color: #efd89a;
   color: var(--warn);
+}
+
+.drafts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.draft-card h2 {
+  margin-bottom: 4px;
+}
+
+.draft-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.draft-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.draft-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.draft-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
 }
 
 .badge-error,
@@ -460,7 +509,8 @@ tbody tr:hover {
 }
 
 @media (max-width: 840px) {
-  .action-grid {
+  .action-grid,
+  .action-grid-4 {
     grid-template-columns: 1fr;
   }
 }

@@ -12,6 +12,9 @@ export type Lead = {
   seo_score?: number | null;
   mobile_score?: number | null;
   failure_reason?: string | null;
+  email_subject?: string | null;
+  personalized_email?: string | null;
+  audit_summary?: string | null;
 };
 
 export type Campaign = {
