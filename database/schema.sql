@@ -71,8 +71,11 @@ CREATE TABLE IF NOT EXISTS leads (
     pagespeed_mobile     INTEGER,                  -- mobile performance 0-100
     pagespeed_desktop    INTEGER,                  -- desktop performance 0-100
 
-    -- WF2 enrichment pain points
+    -- WF2 enrichment pain points + PageSpeed payload / crawl meta
     pain_points          JSONB        DEFAULT '[]'::jsonb,
+    performance_json     JSONB,
+    crawl_metadata       JSONB        DEFAULT '{}'::jsonb,
+    scraperapi_calls     INTEGER      DEFAULT 0,
 
     -- WF3 audit pain points (website + social, structured)
     website_pain_points  JSONB        DEFAULT '[]'::jsonb,
@@ -202,6 +205,21 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                    WHERE table_name = 'leads' AND column_name = 'audited_at') THEN
         ALTER TABLE leads ADD COLUMN audited_at TIMESTAMPTZ;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'leads' AND column_name = 'performance_json') THEN
+        ALTER TABLE leads ADD COLUMN performance_json JSONB;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'leads' AND column_name = 'crawl_metadata') THEN
+        ALTER TABLE leads ADD COLUMN crawl_metadata JSONB DEFAULT '{}'::jsonb;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'leads' AND column_name = 'scraperapi_calls') THEN
+        ALTER TABLE leads ADD COLUMN scraperapi_calls INTEGER DEFAULT 0;
     END IF;
 
     -- campaigns: columns added for WF1 error handling and run summary
