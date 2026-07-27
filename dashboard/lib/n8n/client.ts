@@ -114,7 +114,7 @@ export async function triggerWf3(options?: {
 
   return postJson(url, {
     trigger: "dashboard",
-    batchSize: options?.batchSize ?? 3,
+    batchSize: options?.batchSize ?? 1,
     started_at: new Date().toISOString(),
   });
 }

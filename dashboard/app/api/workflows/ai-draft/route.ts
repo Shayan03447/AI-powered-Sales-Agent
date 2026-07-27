@@ -6,7 +6,7 @@ import { query } from "@/lib/db";
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const batchSize = Number(body.batch_size) || 3;
+    const batchSize = Number(body.batch_size) || 1;
 
     const waiting = await query<{ count: string }>(
       `SELECT COUNT(*)::text AS count

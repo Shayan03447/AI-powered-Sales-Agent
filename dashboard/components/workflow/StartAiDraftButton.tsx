@@ -23,7 +23,7 @@ export default function StartAiDraftButton({
       const res = await fetch("/api/workflows/ai-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batch_size: 3 }),
+        body: JSON.stringify({ batch_size: 1 }),
       });
       const data = await res.json();
 
