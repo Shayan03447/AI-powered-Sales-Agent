@@ -19,7 +19,8 @@
       "position": [
         -3264,
         -368
-      ]
+      ],
+      "disabled": true
     },
     {
       "parameters": {},
@@ -40,7 +41,7 @@
               "id": "cfg-batch",
               "name": "batchSize",
               "type": "number",
-              "value": 5
+              "value": 1
             },
             {
               "id": "cfg-model",
