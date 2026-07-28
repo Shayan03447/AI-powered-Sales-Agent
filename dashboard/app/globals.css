@@ -509,6 +509,50 @@ button.btn-danger:hover:not(:disabled) {
   border: 1px solid #f0c2c2;
 }
 
+.banner-locked {
+  background: #f3f6f9;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  margin: 12px 0;
+}
+
+.banner-locked p {
+  margin: 6px 0 0;
+}
+
+.card-locked {
+  opacity: 0.95;
+}
+
+.pipeline-status {
+  margin-top: 18px;
+}
+
+.pipeline-status h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.pipeline-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.action-tile-locked {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
+.action-tile-locked h2::after {
+  content: " · locked";
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
 .login-page {
   display: flex;
   justify-content: center;

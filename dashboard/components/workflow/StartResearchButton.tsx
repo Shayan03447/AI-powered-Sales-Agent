@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import StepLockNotice from "@/components/workflow/StepLockNotice";
 
 export default function StartResearchButton({
   waitingCount,
@@ -13,8 +14,10 @@ export default function StartResearchButton({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const locked = waitingCount === 0;
 
   async function onStart() {
+    if (locked) return;
     setLoading(true);
     setMessage("");
     setError("");
@@ -48,16 +51,26 @@ export default function StartResearchButton({
   }
 
   return (
-    <div className="card form-card">
+    <div className={`card form-card ${locked ? "card-locked" : ""}`}>
       <h2>Start Research</h2>
       <p className="muted">
-        This runs website research (email, speed scores) for leads with status{" "}
-        <strong>new</strong>. Results appear on the Leads page.
+        Runs only for leads with status <strong>new</strong> (and a website).
+        If every lead is already <strong>enriched</strong>, this step stays
+        locked — use AI Draft instead.
       </p>
 
       <p className="stat-line">
-        Ready to research: <strong>{waitingCount}</strong> lead(s)
+        Ready to research (<code>new</code>):{" "}
+        <strong>{waitingCount}</strong> lead(s)
       </p>
+
+      <StepLockNotice
+        locked={locked}
+        title="Research locked"
+        reason="No leads with status new. Find Leads first, or if leads are already enriched, go to AI Draft."
+        href="/find-leads"
+        linkLabel="Go to Find Leads →"
+      />
 
       {loading && (
         <div className="banner banner-loading">
@@ -68,20 +81,23 @@ export default function StartResearchButton({
       <button
         type="button"
         onClick={onStart}
-        disabled={loading || waitingCount === 0}
+        disabled={loading || locked}
       >
-        {loading ? "Starting…" : "Start Research"}
+        {loading ? "Starting…" : locked ? "Locked — need new leads" : "Start Research"}
       </button>
 
       <Link href="/leads" className="btn-link">
         View leads →
       </Link>
-
-      {waitingCount === 0 && (
-        <p className="muted" style={{ marginTop: 12 }}>
-          No new leads waiting.{" "}
-          <Link href="/find-leads">Find Leads</Link> first.
-        </p>
+      {!locked && (
+        <Link href="/ai-draft" className="btn-link">
+          Next: AI Draft →
+        </Link>
+      )}
+      {locked && (
+        <Link href="/ai-draft" className="btn-link">
+          Try AI Draft (if enriched) →
+        </Link>
       )}
 
       {message && <p className="ok">{message}</p>}
