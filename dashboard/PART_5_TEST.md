@@ -3,7 +3,7 @@
 ## Flow
 ```
 pending_review draft on /drafts
-→ Approve  → status approved   (ready for Part 6 Send)
+→ Approve  → status approved   (queued until send is enabled)
 → Edit     → save subject/body → still pending_review
 → Reject   → status rejected   (never send)
 ```

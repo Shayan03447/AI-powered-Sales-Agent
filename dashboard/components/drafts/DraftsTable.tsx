@@ -42,7 +42,7 @@ export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
 
           {d.status === "approved" && (
             <div className="banner banner-ok">
-              Approved — ready for Send (Part 6).
+              Approved — queued for send when email delivery is enabled.
             </div>
           )}
 

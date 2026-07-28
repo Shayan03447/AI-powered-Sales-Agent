@@ -7,8 +7,9 @@ export default function HomePage() {
         <p className="eyebrow">Atrium Solution</p>
         <h1>Atrium Reach</h1>
         <p className="lede">
-          Find businesses, research websites, draft AI emails, and track every
-          lead in one workspace.
+          Find businesses, research websites, draft AI emails, and approve
+          before anything is sent. Email send enables later with your company
+          domain.
         </p>
         <div className="hero-actions">
           <Link href="/find-leads" className="btn-primary-link">
