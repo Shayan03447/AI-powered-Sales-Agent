@@ -199,6 +199,10 @@ a {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.action-grid-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .action-tile {
   display: block;
   text-decoration: none;
@@ -704,7 +708,8 @@ tbody tr:hover {
 
 @media (max-width: 840px) {
   .action-grid,
-  .action-grid-4 {
+  .action-grid-4,
+  .action-grid-5 {
     grid-template-columns: 1fr;
   }
 }

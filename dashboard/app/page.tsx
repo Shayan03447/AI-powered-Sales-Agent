@@ -10,6 +10,7 @@ export default async function HomePage() {
 
   const researchOpen = c.newReady > 0;
   const aiDraftOpen = c.enrichedReady > 0;
+  const sendOpen = c.approved > 0;
 
   return (
     <main className="fade-in">
@@ -17,16 +18,15 @@ export default async function HomePage() {
         <p className="eyebrow">Atrium Solution</p>
         <h1>Atrium Reach</h1>
         <p className="lede">
-          Find businesses, research websites, draft AI emails, and approve
-          before anything is sent. Email send enables later with your company
-          domain.
+          Find businesses, research websites, draft AI emails, approve, then
+          send from your company domain via Resend.
         </p>
         <div className="hero-actions">
           <Link href="/find-leads" className="btn-primary-link">
             Start Find Leads
           </Link>
-          <Link href="/ai-draft" className="btn-secondary-link">
-            Create AI Emails
+          <Link href="/send" className="btn-secondary-link">
+            Send Approved
           </Link>
         </div>
       </section>
@@ -39,18 +39,19 @@ export default async function HomePage() {
           </p>
           <ul className="pipeline-list">
             <li>
-              <strong>new</strong> (ready for Research): {c.newReady}
-              {researchOpen ? " — Research open" : " — Research locked"}
+              <strong>new</strong> (Research): {c.newReady}
+              {researchOpen ? " — open" : " — locked"}
             </li>
             <li>
-              <strong>enriched</strong> (ready for AI Draft): {c.enrichedReady}
-              {aiDraftOpen ? " — AI Draft open" : " — AI Draft locked"}
+              <strong>enriched</strong> (AI Draft): {c.enrichedReady}
+              {aiDraftOpen ? " — open" : " — locked"}
             </li>
             <li>
               <strong>pending_review</strong> (Drafts): {c.pendingReview}
             </li>
             <li>
-              <strong>approved</strong> (queued for send later): {c.approved}
+              <strong>approved</strong> (Send): {c.approved}
+              {sendOpen ? " — Send open" : " — Send locked"}
             </li>
           </ul>
         </div>
@@ -63,7 +64,7 @@ export default async function HomePage() {
         </div>
       )}
 
-      <section className="action-grid action-grid-4">
+      <section className="action-grid action-grid-5">
         <Link href="/find-leads" className="action-tile">
           <span className="tile-step">01</span>
           <h2>Find Leads</h2>
@@ -100,6 +101,19 @@ export default async function HomePage() {
           <span className="tile-step">04</span>
           <h2>Drafts</h2>
           <p>Approve, edit, or reject AI emails.</p>
+        </Link>
+
+        <Link
+          href="/send"
+          className={`action-tile ${sendOpen ? "" : "action-tile-locked"}`}
+        >
+          <span className="tile-step">05</span>
+          <h2>Send</h2>
+          <p>
+            {sendOpen
+              ? `${c.approved} approved lead(s) ready.`
+              : "Locked — approve drafts first."}
+          </p>
         </Link>
       </section>
     </main>

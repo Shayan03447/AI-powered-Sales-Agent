@@ -3,37 +3,6 @@
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 10
-            }
-          ]
-        }
-      },
-      "id": "b1ac89b3-a629-4586-9b0b-0b584d17e2f1",
-      "name": "Schedule — Every 10 Minutes",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -2112,
-        144
-      ]
-    },
-    {
-      "parameters": {},
-      "id": "6fc86b75-cc75-4f4b-a9fd-b8194ec6d5b7",
-      "name": "Manual Trigger (Test)",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        -2128,
-        352
-      ]
-    },
-    {
-      "parameters": {
         "assignments": {
           "assignments": [
             {
@@ -100,13 +69,13 @@
         },
         "options": {}
       },
-      "id": "8ef2b81e-064f-49ee-b826-6ec3d3e954d0",
+      "id": "d4f307f4-2334-4365-8f39-3b5d389c66b9",
       "name": "config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1904,
-        272
+        -2000,
+        304
       ]
     },
     {
@@ -115,18 +84,18 @@
         "query": "WITH picked AS (\n    SELECT id\n    FROM leads\n    WHERE status = 'new'\n      AND retry_count < {{ $('config').first().json.maxRetries }}\n      AND website_url IS NOT NULL\n      AND TRIM(website_url) <> ''\n    ORDER BY created_at ASC\n    LIMIT {{ $('config').first().json.batchSize }}\n    FOR UPDATE SKIP LOCKED\n)\nUPDATE leads l\nSET\n    status     = 'enriching',\n    updated_at = NOW()\nFROM picked\nWHERE l.id = picked.id\nRETURNING\n    l.id,\n    l.business_name,\n    l.website_url,\n    l.retry_count,\n    l.city,\n    l.category,\n    l.source,\n    l.external_id;",
         "options": {}
       },
-      "id": "d23504e2-622c-4413-9458-2ba0035a977a",
+      "id": "a94ae123-f71f-43d7-bbbb-4a0f2feee0cc",
       "name": "Claim Leads (lock + mark enriching)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -1440,
-        240
+        -1536,
+        272
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -156,13 +125,13 @@
         },
         "options": {}
       },
-      "id": "41495920-2c41-4109-8470-4e67c02ef6fb",
+      "id": "45dbbe61-818f-4304-a0c9-44b8ea9303a5",
       "name": "Any Leads to Enrich?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -1200,
-        240
+        -1296,
+        272
       ]
     },
     {
@@ -171,17 +140,17 @@
         "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n) VALUES (\n  '{{ $('config').first().json.workflowName }}',\n  NOW(),\n  0,\n  0,\n  EXTRACT(EPOCH FROM (NOW() - '{{ $('config').first().json.runStartTs }}'::timestamptz)) * 1000,\n  'no new leads with website in queue'\n);",
         "options": {}
       },
-      "id": "141f0d04-edc9-457d-b1e4-02c3e6c036e7",
+      "id": "3ad9ea31-3942-4e8c-afc7-af3506fc3a0e",
       "name": "Log Empty Run",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -960,
-        400
+        -1056,
+        432
       ],
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -191,13 +160,13 @@
         "mode": "runOnceForEachItem",
         "jsCode": "// Branch A: Smart credit-optimized crawl — WF2 production\n// Matches: Claim Leads input, Merge by id, Extract Contacts downstream\n\nconst cfg = $('config').first().json;\nconst KEY = $env.SCRAPERAPI_KEY || $env.SCRAPER_API_KEY;\nconst MAX_PAGES = Number(cfg.maxPages ?? cfg.maxpages) || 3;\nconst HOME_RETRIES = Number(cfg.retryCountHome ?? cfg.retryCount) || 2;\nconst PATH_RETRIES = Number(cfg.retryCountPath) || 1;\nconst RENDER_HOME = cfg.renderHomepage === true || cfg.renderHomepage === 'true';\nconst EARLY_EXIT = cfg.earlyExitOnEmail !== false && cfg.earlyExitOnEmail !== 'false';\nconst FETCH_CONTACT_IF_NO_SOCIAL =\n  cfg.fetchContactIfNoSocial !== false && cfg.fetchContactIfNoSocial !== 'false';\n\nconst http = this.helpers.httpRequest;\nconst lead = $json;\nconst crawledAt = new Date().toISOString();\nlet scraperapiCalls = 0;\n\nconst fail = (fields) => ({\n  id: lead.id,\n  business_name: lead.business_name,\n  website_url: fields.website_url ?? lead.website_url ?? '',\n  retry_count: lead.retry_count ?? 0,\n  city: lead.city,\n  category: lead.category,\n  pages_crawled: 0,\n  pages_found: [],\n  raw_html: '',\n  raw_emails: [],\n  scraperapi_calls: scraperapiCalls,\n  crawled_at: crawledAt,\n  crawl_error: fields.crawl_error,\n});\n\nif (!KEY) {\n  return fail({ crawl_error: 'missing SCRAPERAPI_KEY or SCRAPER_API_KEY env var' });\n}\n\n// ── URL clean ───────────────────────────────────────────────────\nlet base = (lead.website_url || '')\n  .replace(/[\\u0000-\\u001F\\u007F-\\u009F\\u200B\\u200C\\u200D\\uFEFF]/g, '')\n  .trim();\n\nif (!base) return fail({ website_url: '', crawl_error: 'no_url' });\nif (!/^https?:\\/\\//i.test(base)) base = 'https://' + base;\n\nlet baseHttps = base;\ntry {\n  const u = new URL(base);\n  baseHttps = 'https://' + u.hostname;\n  base = u.href;\n} catch (e) {\n  const hm = base.match(/^https?:\\/\\/([^/]+)/i);\n  if (hm) baseHttps = 'https://' + hm[1];\n}\n\n// ── Scraper helpers ─────────────────────────────────────────────\nconst scraperUrl = (target, render = false) =>\n  'https://api.scraperapi.com/?api_key=' + KEY +\n  '&url=' + encodeURIComponent(target) +\n  '&render=' + (render ? 'true' : 'false');\n\nconst sleep = (ms) => new Promise((r) => setTimeout(r, ms));\nconst MIN_BODY_LEN = 500;\n\nconst fetchPage = async (target, maxRetries, render = false) => {\n  for (let attempt = 1; attempt <= maxRetries; attempt++) {\n    scraperapiCalls++;\n    try {\n      const r = await http({\n        method: 'GET',\n        url: scraperUrl(target, render),\n        timeout: render ? 90000 : 35000,\n      });\n      const body = typeof r === 'string' ? r : (r.body || r.data || '');\n      if (body.length >= MIN_BODY_LEN) return body;\n      if (attempt === maxRetries && body.length > 0 && /<html|<body|<!doctype/i.test(body)) {\n        return body;\n      }\n    } catch (e) {\n      // retry with backoff\n    }\n    if (attempt < maxRetries) await sleep(1000 * Math.pow(2, attempt - 1));\n  }\n  return '';\n};\n\n// ── Email helpers (sync with Extract node) ──────────────────────\nconst EMAIL_RX = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\nconst EMAIL_BLOCK = [\n  'sentry', 'noreply', 'no-reply', 'donotreply', 'example',\n  'nr-data', 'jquery', 'wixpress', 'godaddy', 'schema.org',\n  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',\n];\nconst EMAIL_PRIO = ['contact', 'info', 'hello', 'sales', 'support', 'admin', 'office'];\n\nconst extractEmails = (pages) => {\n  const emails = [...new Set(pages.flatMap((p) => p.match(EMAIL_RX) || []))]\n    .filter((e) => e.length < 100 && !EMAIL_BLOCK.some((b) => e.toLowerCase().includes(b)));\n  const best =\n    emails.find((e) => EMAIL_PRIO.some((p) => e.toLowerCase().startsWith(p))) ||\n    emails[0] ||\n    null;\n  return { all: emails, best, found: !!best };\n};\n\n// ── Social pre-check (fixes early-exit trade-off) ─────────────────\nconst SOCIAL_RX = {\n  facebook: /facebook\\.com\\/[^\"'\\s<>]+/i,\n  instagram: /instagram\\.com\\/[^\"'\\s<>]+/i,\n  linkedin: /linkedin\\.com\\/(?:company|in)\\/[^\"'\\s<>]+/i,\n  twitter: /(?:twitter|x)\\.com\\/[^\\\"'\\s<>]+/i,\n\n};\n\nconst hasSocialLinks = (html) =>\n  SOCIAL_RX.facebook.test(html) ||\n  SOCIAL_RX.instagram.test(html) ||\n  SOCIAL_RX.linkedin.test(html) ||\n  SOCIAL_RX.twitter.test(html);\n\n\nconst strip = (h) =>\n  h\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, '');\n\n// ── Path discovery (FR-3.2 bounded crawl) ─────────────────────────\nconst CONTACT_PATHS = [\n  '/contact', '/contact-us', '/contact_us', '/contact.php',\n  '/get-in-touch', '/reach-us', '/support', '/kontakt', '/impressum',\n];\nconst ABOUT_PATHS = [\n  '/about', '/about-us', '/about_us', '/about.php', '/team', '/our-team',\n];\nconst PATH_PRIORITY = [...CONTACT_PATHS, ...ABOUT_PATHS];\n\nconst discoverPathsFromHtml = (home) => {\n  const src = home.replace(/<script[\\s\\S]*?<\\/script>/gi, '');\n  const found = new Set();\n  const linkRx = /href=[\"']([^\"'#?]+)[\"']/gi;\n  let m;\n  while ((m = linkRx.exec(src)) !== null) {\n    const h = m[1].trim();\n    if (!h || h.startsWith('http') || h.startsWith('//')) continue;\n    if (h.startsWith('/') && /(contact|about|team|support|connect|kontakt)/i.test(h)) {\n      found.add(h.split('?')[0].replace(/\\/$/, '') || h);\n    }\n  }\n  // Priority: HTML links first, then common paths (deduped)\n  const ordered = [];\n  for (const p of [...found, ...PATH_PRIORITY]) {\n    const norm = p.startsWith('/') ? p : '/' + p;\n    if (!ordered.includes(norm)) ordered.push(norm);\n  }\n  return ordered;\n};\n\nconst buildOutput = (pageContents, pagesFound, crawlError) => {\n  const raw_html_full = pageContents.map(strip).join('\\n');\n  const raw_html =\n    raw_html_full.length > 500000\n      ? raw_html_full.slice(0, 500000) + '\\n<!-- TRUNCATED -->'\n      : raw_html_full;\n\n  const emailResult = extractEmails(pageContents);\n\n  return {\n    id: lead.id,\n    business_name: lead.business_name,\n    website_url: base,\n    retry_count: lead.retry_count ?? 0,\n    city: lead.city,\n    category: lead.category,\n    pages_crawled: pageContents.length,\n    pages_found: pagesFound,\n    raw_html,\n    raw_emails: emailResult.all,\n    scraperapi_calls: scraperapiCalls,\n    crawled_at: crawledAt,\n    crawl_error: crawlError,\n  };\n};\n\n// ── Step 1: Homepage (always) ─────────────────────────────────────\nlet home = await fetchPage(base, HOME_RETRIES, RENDER_HOME);\nif (!home && base.startsWith('https://')) {\n  home = await fetchPage(base.replace('https://', 'http://'), 1, RENDER_HOME);\n}\nif (!home) {\n  return buildOutput([], [], 'homepage_failed');\n}\n\nconst pageContents = [home];\nconst pagesFound = ['/'];\nconst visited = new Set(['/']);\n\nlet emailResult = extractEmails(pageContents);\nlet hasSocial = hasSocialLinks(home);\n\n// ── Step 2: Smart extra-page strategy ─────────────────────────────\n// Trade-off fix:\n// - Email + social on home → stop (max savings)\n// - Email but no social → try contact paths only (WF3 social audit)\n// - No email → crawl priority paths until email or MAX_PAGES\n\nconst canAddMore = () => pageContents.length < MAX_PAGES;\n\nconst shouldStop = () => {\n  if (!EARLY_EXIT) return !canAddMore();\n  if (emailResult.found && hasSocial) return true;\n  if (emailResult.found && !hasSocial && !FETCH_CONTACT_IF_NO_SOCIAL) return true;\n  return false;\n};\n\nif (!shouldStop() && canAddMore()) {\n  const candidates = discoverPathsFromHtml(home);\n\n  for (const path of candidates) {\n    if (!canAddMore()) break;\n    if (shouldStop()) break;\n    if (visited.has(path)) continue;\n\n    // Email mil chuka + social bhi → stop\n    if (EARLY_EXIT && emailResult.found && hasSocial) break;\n\n    // Email mil chuka, social nahi → sirf contact-type paths\n    if (emailResult.found && !hasSocial && FETCH_CONTACT_IF_NO_SOCIAL) {\n      const isContactPath = CONTACT_PATHS.some(\n        (cp) => path === cp || path.startsWith(cp + '/')\n      );\n      if (!isContactPath) continue;\n    }\n\n    // Email nahi → contact + about dono try (priority order)\n    visited.add(path);\n    const content = await fetchPage(baseHttps + path, PATH_RETRIES, false);\n    if (!content) continue;\n\n    pageContents.push(content);\n    pagesFound.push(path);\n    emailResult = extractEmails(pageContents);\n    if (!hasSocial) hasSocial = hasSocialLinks(content);\n\n    if (EARLY_EXIT && emailResult.found && hasSocial) break;\n    if (EARLY_EXIT && emailResult.found && !FETCH_CONTACT_IF_NO_SOCIAL) break;\n  }\n}\n\nreturn buildOutput(pageContents, pagesFound, null);"
       },
-      "id": "2951c37b-1513-4af8-b1cf-cbfb793833c4",
+      "id": "ad04bd0b-9080-46e9-8e39-693124a39a1a",
       "name": "Crawl Website",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -976,
-        96
+        -1072,
+        128
       ],
       "onError": "continueErrorOutput"
     },
@@ -206,13 +175,13 @@
         "mode": "runOnceForEachItem",
         "jsCode": "const cfg = $('config').first().json;\n\nconst API_KEY =\n  $env.GOOGLE_PSI_KEY ||\n  $env.GOOGLE_API_KEY;\n\nconst http = this.helpers.httpRequest;\nconst lead = $json;\nconst websiteUrl = String(lead.website_url || '').trim();\n\nconst timeout = Number(cfg.pagespeedTimeoutMs) || 90000;\nconst maxRetries = Number(cfg.pagespeedRetries) || 2;\nconst fetchedAt = new Date().toISOString();\n\nconst sleep = (ms) =>\n  new Promise((resolve) => setTimeout(resolve, ms));\n\nconst buildUrl = (strategy) =>\n  'https://www.googleapis.com/pagespeedonline/v5/runPagespeed' +\n  '?url=' + encodeURIComponent(websiteUrl) +\n  '&key=' + encodeURIComponent(API_KEY) +\n  '&strategy=' + strategy +\n  '&category=performance' +\n  '&category=seo' +\n  '&category=accessibility' +\n  '&category=best-practices';\n\nconst fetchPageSpeed = async (strategy) => {\n  let lastError = null;\n\n  for (let attempt = 1; attempt <= maxRetries; attempt++) {\n    try {\n      const response = await http({\n        method: 'GET',\n        url: buildUrl(strategy),\n        json: true,\n        timeout,\n      });\n\n      return {\n        response,\n        error: null,\n      };\n    } catch (error) {\n      lastError = error.message || `${strategy} PageSpeed failed`;\n\n      const retryable =\n        /timeout|429|5\\d\\d|ECONNRESET|ETIMEDOUT/i.test(lastError);\n\n      if (attempt < maxRetries && retryable) {\n        await sleep(1500 * attempt);\n        continue;\n      }\n\n      break;\n    }\n  }\n\n  return {\n    response: null,\n    error: lastError || `${strategy} PageSpeed failed`,\n  };\n};\n\nconst score = (category) =>\n  category?.score !== null &&\n  category?.score !== undefined\n    ? Math.round(category.score * 100)\n    : null;\n\nconst summarize = (result, strategy) => {\n  if (!result.response) {\n    return {\n      strategy,\n      performance_score: null,\n      seo_score: null,\n      accessibility_score: null,\n      best_practices_score: null,\n      fcp_ms: null,\n      lcp_ms: null,\n      cls: null,\n      final_url: websiteUrl,\n      error: result.error,\n    };\n  }\n\n  const lighthouse =\n    result.response?.lighthouseResult || {};\n\n  const categories = lighthouse.categories || {};\n  const audits = lighthouse.audits || {};\n\n  return {\n    strategy,\n    performance_score: score(categories.performance),\n    seo_score: score(categories.seo),\n    accessibility_score: score(categories.accessibility),\n    best_practices_score: score(categories['best-practices']),\n    fcp_ms:\n      audits['first-contentful-paint']?.numericValue ?? null,\n    lcp_ms:\n      audits['largest-contentful-paint']?.numericValue ?? null,\n    cls:\n      audits['cumulative-layout-shift']?.numericValue ?? null,\n    final_url: lighthouse.finalUrl || websiteUrl,\n    error: null,\n  };\n};\n\nif (!API_KEY) {\n  return {\n    id: lead.id,\n    business_name: lead.business_name,\n    website_url: websiteUrl,\n    retry_count: lead.retry_count ?? 0,\n    pagespeed_score: null,\n    pagespeed_mobile: null,\n    pagespeed_desktop: null,\n    seo_score: null,\n    mobile_score: null,\n    accessibility_score: null,\n    performance_json: {\n      fetched_at: fetchedAt,\n      error: 'Missing GOOGLE_PSI_KEY or GOOGLE_API_KEY',\n    },\n    pagespeed_error:\n      'Missing GOOGLE_PSI_KEY or GOOGLE_API_KEY',\n  };\n}\n\nif (!websiteUrl) {\n  return {\n    id: lead.id,\n    business_name: lead.business_name,\n    website_url: websiteUrl,\n    retry_count: lead.retry_count ?? 0,\n    pagespeed_score: null,\n    pagespeed_mobile: null,\n    pagespeed_desktop: null,\n    seo_score: null,\n    mobile_score: null,\n    accessibility_score: null,\n    performance_json: {\n      fetched_at: fetchedAt,\n      error: 'No website URL',\n    },\n    pagespeed_error: 'No website URL',\n  };\n}\n\n// Sequential calls to reduce API rate-limit risk\nconst mobileResult = await fetchPageSpeed('mobile');\nconst desktopResult = await fetchPageSpeed('desktop');\n\nconst mobile = summarize(mobileResult, 'mobile');\nconst desktop = summarize(desktopResult, 'desktop');\n\nconst pagespeedMobile = mobile.performance_score;\nconst pagespeedDesktop = desktop.performance_score;\n\nconst errors = [\n  mobile.error ? `mobile: ${mobile.error}` : null,\n  desktop.error ? `desktop: ${desktop.error}` : null,\n].filter(Boolean);\n\nreturn {\n  id: lead.id,\n  business_name: lead.business_name,\n  website_url: websiteUrl,\n  retry_count: lead.retry_count ?? 0,\n\n  // Backward compatibility\n  pagespeed_score:\n    pagespeedMobile ?? pagespeedDesktop,\n  mobile_score: pagespeedMobile,\n\n  // Correct explicit scores\n  pagespeed_mobile: pagespeedMobile,\n  pagespeed_desktop: pagespeedDesktop,\n  seo_score:\n    mobile.seo_score ?? desktop.seo_score,\n  accessibility_score:\n    mobile.accessibility_score ??\n    desktop.accessibility_score,\n\n  performance_json: {\n    fetched_at: fetchedAt,\n    mobile,\n    desktop,\n  },\n\n  pagespeed_error:\n    errors.length === 2\n      ? errors.join(' | ')\n      : null,\n};"
       },
-      "id": "d1e65a47-44e1-4b16-911f-ca186e12a5d8",
+      "id": "40568f19-c881-4cfa-97e9-6a1b425df771",
       "name": "PageSpeed Insights",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -960,
-        240
+        -1056,
+        272
       ],
       "onError": "continueErrorOutput"
     },
@@ -222,13 +191,13 @@
         "fieldsToMatchString": "id",
         "options": {}
       },
-      "id": "f7379b62-a7ae-4d99-a266-fbabaf9f2bdc",
+      "id": "f06a5f76-6a38-48f1-99ef-91b52fc94a61",
       "name": "Merge Crawl + PageSpeed",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.1,
       "position": [
-        -720,
-        160
+        -816,
+        192
       ]
     },
     {
@@ -236,13 +205,13 @@
         "mode": "runOnceForEachItem",
         "jsCode": "const it = $json;\n\nconst hasScrape =\n  !!(it.raw_html && it.raw_html.length > 100) ||\n  (Number(it.pages_crawled) > 0 && !it.crawl_error);\n\nconst hasPagespeed =\n  it.pagespeed_score !== null && it.pagespeed_score !== undefined;\n\nif (!hasScrape && !hasPagespeed) {\n  const reasons = [];\n  if (it.crawl_error) reasons.push('crawl: ' + it.crawl_error);\n  if (it.pagespeed_error) reasons.push('pagespeed: ' + it.pagespeed_error);\n\n  return {\n    ...it,\n    _hard_fail: true,\n    failure_reason: reasons.length\n      ? reasons.join(' | ')\n      : 'scrape and pagespeed both failed',\n  };\n}\n\nreturn { ...it, _hard_fail: false };"
       },
-      "id": "9ef19f41-02a9-4b7d-b4da-69aa30844a31",
+      "id": "be07ee0c-f070-44e0-8023-590bc2d601b3",
       "name": "Validate Enrichment",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -480,
-        160
+        -576,
+        192
       ]
     },
     {
@@ -270,13 +239,13 @@
         },
         "options": {}
       },
-      "id": "46f6ef7e-5756-467c-a9c6-d41107b8dbc6",
+      "id": "9518123a-cae6-4c40-be60-82b54f8950e2",
       "name": "Hard Fail?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -240,
-        160
+        -336,
+        192
       ]
     },
     {
@@ -287,18 +256,18 @@
           "queryBatching": "single"
         }
       },
-      "id": "c0123ebc-7eef-4712-b640-63d3dc9f6aba",
+      "id": "fc7dc9ed-4642-44ee-9c04-d733b150d399",
       "name": "Mark Enrich Failed (retry or terminal)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        0,
-        0
+        -96,
+        32
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -308,13 +277,13 @@
         "mode": "runOnceForEachItem",
         "jsCode": "// Extract emails, socials, and structured pain points\n// FR-3.3–3.4, FR-4.4–4.5\n\nconst it = $json;\n\nconst all = String(it.raw_html || '');\nconst base = String(it.website_url || '').trim();\n\n// PageSpeed scores\nconst mobilePs =\n  it.pagespeed_mobile ??\n  it.pagespeed_score ??\n  null;\n\nconst desktopPs =\n  it.pagespeed_desktop ??\n  null;\n\nconst seo =\n  it.seo_score ??\n  null;\n\nconst acc =\n  it.accessibility_score ??\n  it.performance_json?.mobile?.accessibility_score ??\n  null;\n\n// Email extraction\nconst emailRegex =\n  /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\n\nconst blockedEmailParts = [\n  'noreply',\n  'no-reply',\n  'donotreply',\n  'example',\n  '.png',\n  '.jpg',\n  '.jpeg',\n  '.gif',\n  '.svg',\n  '.webp',\n  'sentry',\n  'wixpress',\n  'wordpress',\n  'schema.org',\n  'godaddy',\n];\n\nconst isValidEmail = (email) => {\n  const normalized = String(email || '').toLowerCase();\n\n  return (\n    normalized.length < 100 &&\n    !blockedEmailParts.some((part) =>\n      normalized.includes(part)\n    )\n  );\n};\n\nconst htmlEmails = [\n  ...new Set(all.match(emailRegex) || []),\n].filter(isValidEmail);\n\nconst preExtractedEmails = (\n  Array.isArray(it.raw_emails)\n    ? it.raw_emails\n    : []\n).filter(isValidEmail);\n\nconst emails = [\n  ...new Set([\n    ...htmlEmails,\n    ...preExtractedEmails,\n  ]),\n];\n\nconst priorityPrefixes = [\n  'contact',\n  'info',\n  'hello',\n  'sales',\n  'support',\n  'admin',\n  'office',\n];\n\nconst email =\n  emails.find((candidate) =>\n    priorityPrefixes.some((prefix) =>\n      candidate.toLowerCase().startsWith(prefix)\n    )\n  ) ??\n  emails[0] ??\n  null;\n\n// Social URL extraction\nconst extractSocialUrl = (regex, junkPaths = []) => {\n  const matches = all.match(regex) || [];\n\n  for (const match of matches) {\n    const clean = match\n      .replace(/[\"'>].*$/, '')\n      .split('?')[0]\n      .replace(/\\/$/, '');\n\n    const path = clean\n      .split('/')\n      .slice(3)\n      .join('/');\n\n    if (path.length < 3) {\n      continue;\n    }\n\n    if (\n      junkPaths.some((junkPath) =>\n        clean.toLowerCase().includes(\n          junkPath.toLowerCase()\n        )\n      )\n    ) {\n      continue;\n    }\n\n    return clean;\n  }\n\n  return null;\n};\n\nconst junkSocialPaths = [\n  'sharer',\n  'share',\n  '/tr',\n  'plugins',\n  'dialog',\n  'login',\n];\n\nconst facebook_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?facebook\\.com\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\nconst instagram_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?instagram\\.com\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\nconst twitter_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?(twitter|x)\\.com\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\nconst linkedin_url = extractSocialUrl(\n  /https?:\\/\\/(www\\.)?linkedin\\.com\\/(company|in)\\/[^\"'\\s<>]+/gi,\n  junkSocialPaths\n);\n\n// Clean website text\nconst scraped_html = all\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s{2,}/g, ' ')\n  .trim()\n  .slice(0, 3000);\n\n// Website checks\nconst has_https =\n  base.toLowerCase().startsWith('https://');\n\nconst has_viewport =\n  /<meta[^>]+viewport/i.test(all);\n\nconst has_meta_description =\n  /<meta[^>]+name=[\"']description[\"'][^>]*content=[\"'][^\"']+[\"']/i.test(\n    all\n  );\n\nconst titleMatch =\n  all.match(/<title[^>]*>([^<]*)<\\/title>/i);\n\nconst has_title =\n  Boolean(titleMatch?.[1]?.trim());\n\nconst imageCount =\n  (all.match(/<img\\b/gi) || []).length;\n\nconst imagesWithoutAlt =\n  (\n    all.match(\n      /<img\\b(?:(?!alt=)[^>])*>/gi\n    ) || []\n  ).length;\n\nconst has_contact_form =\n  /<form/i.test(all);\n\nconst copyrightYear =\n  (\n    all.match(\n      /(?:©|&copy;|copyright)[^0-9]{0,12}(20\\d{2})/i\n    ) || []\n  )[1] || null;\n\nconst stale_copyright =\n  copyrightYear\n    ? new Date().getFullYear() -\n        Number(copyrightYear) >=\n      2\n    : false;\n\nconst word_count = scraped_html\n  .split(/\\s+/)\n  .filter(Boolean)\n  .length;\n\nconst social_count = [\n  linkedin_url,\n  facebook_url,\n  instagram_url,\n  twitter_url,\n].filter(Boolean).length;\n\n// Structured pain points\nconst addPain = (\n  area,\n  problem,\n  solution,\n  severity\n) => ({\n  area,\n  problem,\n  solution,\n  severity,\n});\n\nconst pain_points = [];\n\nif (mobilePs !== null && mobilePs < 60) {\n  pain_points.push(\n    addPain(\n      'performance',\n      `Mobile PageSpeed score is ${mobilePs}/100`,\n      'Mobile speed optimization and responsive improvements',\n      mobilePs < 40 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (desktopPs !== null && desktopPs < 70) {\n  pain_points.push(\n    addPain(\n      'performance',\n      `Desktop PageSpeed score is ${desktopPs}/100`,\n      'Desktop performance, caching, and asset optimization',\n      desktopPs < 50 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (seo !== null && seo < 70) {\n  pain_points.push(\n    addPain(\n      'seo',\n      `SEO score is ${seo}/100`,\n      'On-page SEO fixes: meta tags, structure, and content optimization',\n      seo < 50 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (acc !== null && acc < 70) {\n  pain_points.push(\n    addPain(\n      'accessibility',\n      `Accessibility score is ${acc}/100`,\n      'Accessibility and mobile UX improvements',\n      acc < 50 ? 'high' : 'medium'\n    )\n  );\n}\n\nif (!has_https) {\n  pain_points.push(\n    addPain(\n      'security',\n      'Site is not served over HTTPS',\n      'SSL certificate setup and HTTPS migration',\n      'high'\n    )\n  );\n}\n\nif (!has_viewport) {\n  pain_points.push(\n    addPain(\n      'ux',\n      'Missing mobile viewport meta tag',\n      'Responsive design and mobile optimization',\n      'high'\n    )\n  );\n}\n\nif (!has_meta_description) {\n  pain_points.push(\n    addPain(\n      'seo',\n      'Missing meta description',\n      'SEO meta tag optimization',\n      'medium'\n    )\n  );\n}\n\nif (!has_title) {\n  pain_points.push(\n    addPain(\n      'seo',\n      'Missing or empty page title',\n      'Title tag optimization',\n      'medium'\n    )\n  );\n}\n\nif (\n  imageCount > 0 &&\n  imagesWithoutAlt / imageCount > 0.5\n) {\n  pain_points.push(\n    addPain(\n      'seo',\n      `${imagesWithoutAlt} of ${imageCount} images are missing alt text`,\n      'Image alt-text audit and remediation',\n      'low'\n    )\n  );\n}\n\nif (stale_copyright) {\n  pain_points.push(\n    addPain(\n      'content',\n      `Outdated copyright year (${copyrightYear})`,\n      'Website content refresh',\n      'low'\n    )\n  );\n}\n\nif (word_count < 150) {\n  pain_points.push(\n    addPain(\n      'content',\n      `Thin content (${word_count} words)`,\n      'Content expansion with clear service messaging',\n      'medium'\n    )\n  );\n}\n\nif (!has_contact_form) {\n  pain_points.push(\n    addPain(\n      'ux',\n      'No contact form found',\n      'Lead capture form and stronger CTA',\n      'medium'\n    )\n  );\n}\n\nif (social_count === 0) {\n  pain_points.push(\n    addPain(\n      'social_presence',\n      'No social profiles linked from website',\n      'Social profile setup and cross-linking',\n      'low'\n    )\n  );\n}\n\n// Crawl metadata\nconst pagesVisited = [\n  ...new Set(\n    Array.isArray(it.pages_found) &&\n    it.pages_found.length\n      ? it.pages_found\n      : ['/']\n  ),\n];\n\nconst crawl_metadata = {\n  pages_visited: pagesVisited,\n  pages_crawled:\n    Number(it.pages_crawled) || 0,\n  crawled_at:\n    it.crawled_at ||\n    new Date().toISOString(),\n  crawl_error:\n    it.crawl_error || null,\n  pagespeed_error:\n    it.pagespeed_error || null,\n};\n\n// Final output\nreturn {\n  id: it.id,\n  business_name: it.business_name,\n  website_url: base,\n  retry_count:\n    Number(it.retry_count) || 0,\n\n  email_found: Boolean(email),\n  email,\n  facebook_url,\n  instagram_url,\n  twitter_url,\n  linkedin_url,\n\n  pagespeed_score: mobilePs,\n  pagespeed_mobile: mobilePs,\n  pagespeed_desktop: desktopPs,\n  seo_score: seo,\n  mobile_score: mobilePs,\n  accessibility_score: acc,\n\n  performance_json:\n    it.performance_json || null,\n\n  pain_points,\n  scraped_html,\n\n  pages_crawled:\n    Number(it.pages_crawled) || 0,\n\n  crawl_metadata,\n\n  scraperapi_calls:\n    Number(it.scraperapi_calls) || 0,\n};"
       },
-      "id": "e39a72c5-64e2-4315-b919-a007720ad3db",
+      "id": "4763683d-d057-41e3-ae8b-ca7243bfa8f0",
       "name": "Extract Contacts & Pain Points",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -16,
-        256
+        -112,
+        288
       ]
     },
     {
@@ -342,13 +311,13 @@
         },
         "options": {}
       },
-      "id": "4d1576b1-eb0c-4148-93e9-db39f89a50e8",
+      "id": "82332312-1b3b-4812-985c-cef603591a3f",
       "name": "Email Found?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        240,
-        240
+        144,
+        272
       ]
     },
     {
@@ -359,18 +328,18 @@
           "queryBatching": "single"
         }
       },
-      "id": "3e670289-2599-4a5a-816c-12771328879b",
+      "id": "99e59b92-226f-4564-ac19-dc35d7863f48",
       "name": "Mark Enriched",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        480,
-        160
+        384,
+        192
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -383,18 +352,18 @@
           "queryBatching": "single"
         }
       },
-      "id": "bc1e06ff-9445-4993-8ee8-12e28e961dce",
+      "id": "ec880ee1-4110-454d-8127-bc02db687862",
       "name": "Mark No Email",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        480,
-        320
+        384,
+        352
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -405,17 +374,17 @@
         "query": "INSERT INTO workflow_logs (workflow_name, run_at, leads_processed, leads_failed, duration_ms, notes) VALUES ('{{ $json.workflow_name }}', NOW(), {{ $json.leads_processed }}, {{ $json.leads_failed }}, {{ $json.duration_ms }}, '{{ $json.notes.replace(/'/g, \"''\") }}');",
         "options": {}
       },
-      "id": "261bd276-71d4-4798-857f-558c91e0c648",
+      "id": "a4874124-a22c-4dc8-9def-8423fef829d3",
       "name": "Log Run to workflow_logs",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1200,
-        160
+        1104,
+        192
       ],
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -425,13 +394,13 @@
         "mode": "runOnceForEachItem",
         "jsCode": "const errorItem = $json;\n\nlet loopLead = {};\n\ntry {\n  loopLead = $('Loop Leads').item.json || {};\n} catch (_error) {\n  loopLead = {};\n}\n\nconst leadId =\n  errorItem.id ??\n  loopLead.id ??\n  null;\n\nconst errorMessage =\n  errorItem.error?.message ??\n  errorItem.error?.description ??\n  errorItem.failure_reason ??\n  'Unexpected workflow error during enrichment';\n\nreturn {\n  id: leadId,\n  failure_reason: String(errorMessage),\n};"
       },
-      "id": "af4ceebc-4050-4ab8-ad1f-7ec36d880c2f",
+      "id": "741ed1ca-ce57-4430-8eaa-b87e953f21ec",
       "name": "Normalize Error Item",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -672,
-        480
+        -768,
+        512
       ]
     },
     {
@@ -442,18 +411,18 @@
           "queryBatching": "single"
         }
       },
-      "id": "56ba8a0b-0dc0-457b-a01f-a9a27798bf18",
+      "id": "e81d42e3-09aa-4183-9ad3-7d73c21d02b8",
       "name": "Log Error to workflow_logs",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -192,
-        480
+        -288,
+        512
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -466,18 +435,18 @@
           "queryBatching": "single"
         }
       },
-      "id": "83c45c35-7aa3-4bac-a5aa-5b749a374fe3",
+      "id": "0d51f315-492e-465c-abb8-1abef4f841d5",
       "name": "Recover Stuck Enriching Lead",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -432,
-        480
+        -528,
+        512
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -486,13 +455,13 @@
       "parameters": {
         "jsCode": "// Prepare Run Summary — safe when Mark nodes skip (n8n 2.x)\nconst cfg = $('config').first().json;\n\nconst safeAll = (nodeName) => {\n  try {\n    return $(nodeName).all();\n  } catch (e) {\n    return [];\n  }\n};\n\nconst enriched = safeAll('Mark Enriched');\nconst noEmail = safeAll('Mark No Email');\nconst failed = safeAll('Mark Enrich Failed (retry or terminal)');\n\nconst successCount = enriched.length;\nconst noEmailCount = noEmail.length;\nconst failedCount = failed.length;\n\nconst leadIds = [...enriched, ...noEmail, ...failed]\n  .map((i) => i.json.id)\n  .filter(Boolean)\n  .join(',');\n\nconst start = new Date(cfg.runStartTs).getTime();\nconst durationMs = Number.isFinite(start) ? Date.now() - start : 0;\n\nreturn [{\n  json: {\n    workflow_name: cfg.workflowName || 'enrichment',\n    leads_processed: successCount + noEmailCount,\n    leads_failed: failedCount,\n    duration_ms: durationMs,\n    notes:\n      'WF2 enrichment | enriched=' + successCount +\n      ' no_email=' + noEmailCount +\n      ' failed=' + failedCount +\n      ' | batch_ids: ' + (leadIds || 'none'),\n  },\n}];"
       },
-      "id": "82bb731e-bde6-44f9-957f-50125e9a00ce",
+      "id": "140c5bb9-73ba-427d-8dbe-ee1a8c754fbe",
       "name": "Prepare Run Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        960,
-        160
+        864,
+        192
       ]
     },
     {
@@ -504,14 +473,14 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -1680,
-        272
+        -1776,
+        304
       ],
-      "id": "6eb170b1-0c66-4e41-b0e3-8ce7c90ed08c",
+      "id": "a23de539-2242-47d4-a62a-db720e59ee11",
       "name": "Reset Stale Enriching Leads",
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -523,37 +492,31 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -1280,
-        48
+        -1376,
+        80
       ],
-      "id": "a3cb9857-f7cb-4959-a3c2-8067e5ccf7af",
+      "id": "63524f27-4ca2-4d35-b229-3197589e3948",
       "name": "Loop Leads"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf2-research",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2208,
+        304
+      ],
+      "id": "d669ae9d-0f44-4da2-96af-645ef0c72430",
+      "name": "Webhook",
+      "webhookId": "9c9ee7d0-94ba-43df-a617-66c91e27dca9"
     }
   ],
   "pinData": {},
   "connections": {
-    "Schedule — Every 10 Minutes": {
-      "main": [
-        [
-          {
-            "node": "config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Manual Trigger (Test)": {
-      "main": [
-        [
-          {
-            "node": "config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "config": {
       "main": [
         [
@@ -765,11 +728,6 @@
         ]
       ]
     },
-    "Log Empty Run": {
-      "main": [
-        []
-      ]
-    },
     "Reset Stale Enriching Leads": {
       "main": [
         [
@@ -814,20 +772,31 @@
           }
         ]
       ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "b0affc17-ea05-483e-a949-8d768fa46a78",
+  "versionId": "abfb73b2-9d33-4b3e-8561-49964a36e14e",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"
+    "instanceId": "5487c2cd22f827f5757f582350d3188530ab4fbc0c2407b94d0f386c9fac1637"
   },
   "nodeGroups": [],
-  "id": "TeElaMa2VTIzewJb",
+  "id": "9ORpDqW3NAm5M96s",
   "tags": []
 }

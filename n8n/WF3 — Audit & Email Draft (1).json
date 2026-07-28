@@ -1,0 +1,518 @@
+{
+  "name": "WF3 — Audit & Email Draft",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-batch",
+              "name": "batchSize",
+              "type": "number",
+              "value": 1
+            },
+            {
+              "id": "cfg-model",
+              "name": "openaiModel",
+              "type": "string",
+              "value": "gpt-4o-mini"
+            },
+            {
+              "id": "cfg-retries",
+              "name": "maxRetries",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "cfg-agency",
+              "name": "agencyName",
+              "type": "string",
+              "value": "={{ $env.AGENCY_NAME || 'Atrium Solution' }}"
+            },
+            {
+              "id": "cfg-calendar",
+              "name": "calendarLink",
+              "type": "string",
+              "value": "={{ $env.CALENDAR_LINK || 'https://calendly.com/atrium-solution' }}"
+            },
+            {
+              "id": "cfg-workflow",
+              "name": "workflowName",
+              "type": "string",
+              "value": "audit_and_draft"
+            },
+            {
+              "id": "cfg-start",
+              "name": "runStartTs",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5745362a-53f4-48ca-a55e-648409f51737",
+      "name": "config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2496,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH recovered AS (\n  UPDATE public.leads\n  SET\n    retry_count =\n      retry_count + 1,\n\n    status =\n      CASE\n        WHEN retry_count + 1 >=\n          {{ $('config').first().json.maxRetries }}\n        THEN 'audit_failed'\n        ELSE 'enriched'\n      END,\n\n    failure_reason =\n      CASE\n        WHEN retry_count + 1 >=\n          {{ $('config').first().json.maxRetries }}\n        THEN\n          'Audit timed out after 20 minutes; retry limit reached'\n        ELSE\n          'Recovered stale audit; retry scheduled'\n      END,\n\n    updated_at = NOW()\n\n  WHERE status = 'auditing'\n    AND updated_at <\n      NOW() - INTERVAL '20 minutes'\n\n  RETURNING status\n)\n\nSELECT\n  COUNT(*) AS recovered_count,\n\n  COUNT(*) FILTER (\n    WHERE status = 'audit_failed'\n  ) AS terminal_failed_count\n\nFROM recovered;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "b9543452-3ca0-4a4a-9442-ed5d904a758e",
+      "name": "Postgres — Recover Stuck Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -2256,
+        320
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "rv3d65xUqQa1nugc",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH picked AS (\n  SELECT id\n  FROM public.leads\n  WHERE status = 'enriched'\n    AND email IS NOT NULL\n    AND TRIM(email) <> ''\n    AND retry_count <\n      {{ $('config').first().json.maxRetries }}\n  ORDER BY\n    enriched_at ASC NULLS LAST,\n    created_at ASC\n  LIMIT\n    {{ $('config').first().json.batchSize }}\n  FOR UPDATE SKIP LOCKED\n)\n\nUPDATE public.leads AS lead\nSET\n  status = 'auditing',\n  failure_reason = NULL,\n  updated_at = NOW()\n\nFROM picked\nWHERE lead.id = picked.id\n\nRETURNING\n  lead.id,\n  lead.business_name,\n  lead.category,\n  lead.city,\n  COALESCE(lead.state, '') AS state,\n  COALESCE(lead.country, 'US') AS country,\n  lead.website_url,\n  COALESCE(lead.email, '') AS email,\n\n  COALESCE(lead.facebook_url, '') AS facebook_url,\n  COALESCE(lead.instagram_url, '') AS instagram_url,\n  COALESCE(lead.linkedin_url, '') AS linkedin_url,\n  COALESCE(lead.twitter_url, '') AS twitter_url,\n\n  lead.rating,\n  lead.review_count,\n  lead.campaign_id,\n  lead.retry_count,\n\n  lead.pagespeed_mobile,\n  lead.pagespeed_desktop,\n  lead.pagespeed_score,\n  lead.seo_score,\n  lead.mobile_score,\n\n  COALESCE(\n    lead.performance_json,\n    '{}'::jsonb\n  ) AS performance_json,\n\n  COALESCE(\n    lead.pain_points,\n    '[]'::jsonb\n  ) AS enrichment_pain_points,\n\n  COALESCE(\n    lead.scraped_html,\n    ''\n  ) AS scraped_html,\n\n  COALESCE(\n    lead.crawl_metadata,\n    '{}'::jsonb\n  ) AS crawl_metadata,\n\n  COALESCE(\n    lead.pages_crawled,\n    0\n  ) AS pages_crawled;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "09123ef3-2e21-412d-a6c6-d7c15849b000",
+      "name": "Postgres — Fetch & Lock Enriched Leads",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -2016,
+        320
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "rv3d65xUqQa1nugc",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-id",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "530bd6d3-4a45-4ab2-8813-c145564199b3",
+      "name": "IF — Has Leads",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1776,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n) VALUES (\n  'audit_and_draft',\n  NOW(),\n  0,\n  0,\n  0,\n  'no enriched leads with email in queue'\n);",
+        "options": {}
+      },
+      "id": "120d5b83-da73-4d22-bcf5-8e770d3636b5",
+      "name": "Postgres — Log Empty Run",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -1536,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "rv3d65xUqQa1nugc",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "b234bc8c-ceb2-4e80-80d3-3b838ae04de7",
+      "name": "Split in Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1536,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $json;\n\nconst scraperApiKey =\n  $env.SCRAPERAPI_KEY ||\n  $env.SCRAPER_API_KEY;\n\nconst facebookUrl =\n  String(\n    lead.facebook_url || ''\n  ).trim();\n\nconst instagramUrl =\n  String(\n    lead.instagram_url || ''\n  ).trim();\n\nlet scraperCalls = 0;\nconst scrapeErrors = [];\n\nconst scrapeProfile = async (\n  platform,\n  targetUrl\n) => {\n  if (!targetUrl) {\n    return '';\n  }\n\n  if (!scraperApiKey) {\n    scrapeErrors.push(\n      `Missing ScraperAPI key for ${platform}`\n    );\n\n    return '';\n  }\n\n  scraperCalls++;\n\n  try {\n    const response =\n      await this.helpers.httpRequest({\n        method: 'GET',\n\n        url:\n          'https://api.scraperapi.com/' +\n          '?api_key=' +\n          encodeURIComponent(\n            scraperApiKey\n          ) +\n          '&render=false' +\n          '&url=' +\n          encodeURIComponent(\n            targetUrl\n          ),\n\n        timeout: 25000,\n      });\n\n    let html = '';\n\n    if (\n      typeof response === 'string'\n    ) {\n      html = response;\n    } else if (\n      typeof response?.body ===\n      'string'\n    ) {\n      html = response.body;\n    } else if (\n      typeof response?.data ===\n      'string'\n    ) {\n      html = response.data;\n    }\n\n    // Avoid excessive execution memory\n    return html.slice(0, 150000);\n  } catch (error) {\n    scrapeErrors.push(\n      `${platform}: ${\n        error.message ||\n        'scrape failed'\n      }`\n    );\n\n    return '';\n  }\n};\n\n// Only existing social profiles consume credits\nconst [\n  facebookHtml,\n  instagramHtml,\n] = await Promise.all([\n  scrapeProfile(\n    'facebook',\n    facebookUrl\n  ),\n\n  scrapeProfile(\n    'instagram',\n    instagramUrl\n  ),\n]);\n\nreturn{\n  json: {\n    ...lead,\n    fb_html:\n      facebookHtml,\n    ig_html:\n      instagramHtml,\n    social_scraper_calls:\n      scraperCalls,\n    social_scrape_errors:\n      scrapeErrors,\n  },\n};"
+      },
+      "id": "0a688c91-2bc6-4fde-a6e9-fcfc5ac9fee2",
+      "name": "Code — Scrape Social",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -816,
+        160
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const lead = $json;\nconst cfg = $('config').first().json;\n\nconst apiKey = $env.OPENAI_API_KEY;\nconst agencyName =\n  cfg.agencyName || 'Atrium Solution';\n\nconst calendarLink =\n  cfg.calendarLink ||\n  'https://calendly.com/atrium-solution';\n\nconst model =\n  cfg.openaiModel || 'gpt-4o-mini';\n\nconst mobileScore =\n  lead.pagespeed_mobile ??\n  lead.pagespeed_score ??\n  null;\n\nconst desktopScore =\n  lead.pagespeed_desktop ??\n  null;\n\nconst seoScore =\n  lead.seo_score ??\n  null;\n\nconst accessibilityScore =\n  lead.performance_json?.mobile\n    ?.accessibility_score ??\n  null;\n\n// Normalize WF2 pain points\nconst normalizePainPoint = (\n  painPoint,\n  index\n) => {\n  if (typeof painPoint === 'string') {\n    return {\n      area: 'website',\n      problem: painPoint,\n      solution:\n        'Review and resolve this website issue',\n      severity: 'medium',\n    };\n  }\n\n  return {\n    area:\n      painPoint?.area ||\n      painPoint?.platform ||\n      'website',\n\n    problem:\n      painPoint?.problem ||\n      `Website issue ${index + 1}`,\n\n    solution:\n      painPoint?.solution ||\n      'Review and resolve this issue',\n\n    severity:\n      painPoint?.severity ||\n      'medium',\n  };\n};\n\nconst storedPainPoints =\n  Array.isArray(\n    lead.enrichment_pain_points\n  )\n    ? lead.enrichment_pain_points\n    : [];\n\nconst websitePainPoints =\n  storedPainPoints.map(normalizePainPoint);\n\n// Prevent duplicate metric observations\nconst hasProblemContaining = (text) =>\n  websitePainPoints.some((point) =>\n    String(point.problem || '')\n      .toLowerCase()\n      .includes(text.toLowerCase())\n  );\n\nif (\n  mobileScore !== null &&\n  mobileScore < 60 &&\n  !hasProblemContaining('mobile pagespeed')\n) {\n  websitePainPoints.push({\n    area: 'performance',\n    problem:\n      `Mobile PageSpeed score is ${mobileScore}/100`,\n    solution:\n      'Improve Core Web Vitals, images, caching, and mobile loading speed',\n    severity:\n      mobileScore < 40\n        ? 'high'\n        : 'medium',\n  });\n}\n\nif (\n  desktopScore !== null &&\n  desktopScore < 70 &&\n  !hasProblemContaining('desktop pagespeed')\n) {\n  websitePainPoints.push({\n    area: 'performance',\n    problem:\n      `Desktop PageSpeed score is ${desktopScore}/100`,\n    solution:\n      'Optimize desktop assets, caching, and server response time',\n    severity:\n      desktopScore < 50\n        ? 'high'\n        : 'medium',\n  });\n}\n\nif (\n  seoScore !== null &&\n  seoScore < 70 &&\n  !hasProblemContaining('seo score')\n) {\n  websitePainPoints.push({\n    area: 'seo',\n    problem:\n      `SEO score is ${seoScore}/100`,\n    solution:\n      'Improve metadata, page structure, and on-page SEO',\n    severity:\n      seoScore < 50\n        ? 'high'\n        : 'medium',\n  });\n}\n\nif (\n  accessibilityScore !== null &&\n  accessibilityScore < 70 &&\n  !hasProblemContaining(\n    'accessibility score'\n  )\n) {\n  websitePainPoints.push({\n    area: 'accessibility',\n    problem:\n      `Accessibility score is ${accessibilityScore}/100`,\n    solution:\n      'Improve contrast, labels, navigation, and accessible interactions',\n    severity:\n      accessibilityScore < 50\n        ? 'high'\n        : 'medium',\n  });\n}\n\n// Social audit only when a profile exists\nconst socialPainPoints = [];\n\nconst facebookHtml =\n  String(lead.fb_html || '')\n    .toLowerCase();\n\nconst instagramHtml =\n  String(lead.ig_html || '')\n    .toLowerCase();\n\nconst hasFacebook =\n  Boolean(\n    String(\n      lead.facebook_url || ''\n    ).trim()\n  );\n\nconst hasInstagram =\n  Boolean(\n    String(\n      lead.instagram_url || ''\n    ).trim()\n  );\n\n// Only record explicit evidence.\n// Login walls or empty scraper responses\n// are not treated as business problems.\nif (\n  hasFacebook &&\n  facebookHtml.length > 500 &&\n  (\n    facebookHtml.includes(\n      'page isn\\'t available'\n    ) ||\n    facebookHtml.includes(\n      'content isn\\'t available'\n    )\n  )\n) {\n  socialPainPoints.push({\n    platform: 'facebook',\n    problem:\n      'Linked Facebook page appears unavailable to public visitors',\n    solution:\n      'Review the Facebook page visibility and public business settings',\n    severity: 'medium',\n  });\n}\n\nif (\n  hasInstagram &&\n  instagramHtml.length > 500 &&\n  (\n    instagramHtml.includes(\n      'this account is private'\n    ) ||\n    instagramHtml.includes(\n      'page isn\\'t available'\n    )\n  )\n) {\n  socialPainPoints.push({\n    platform: 'instagram',\n    problem:\n      'Linked Instagram profile appears private or unavailable',\n    solution:\n      'Review profile visibility and business-account settings',\n    severity: 'medium',\n  });\n}\n\n// Use only evidence-based findings\nconst allPainPoints = [\n  ...websitePainPoints,\n  ...socialPainPoints,\n]\n  .filter(\n    (point) =>\n      point.problem &&\n      point.solution\n  )\n  .slice(0, 8);\n\nconst auditSummary =\n  allPainPoints\n    .map(\n      (point, index) =>\n        `${index + 1}. ` +\n        `[${String(\n          point.area ||\n          point.platform ||\n          'website'\n        ).toUpperCase()} | ` +\n        `${String(\n          point.severity ||\n          'medium'\n        ).toUpperCase()}] ` +\n        `${point.problem}\\n` +\n        `Recommended fix: ` +\n        `${point.solution}`\n    )\n    .join('\\n');\n\nlet auditSuccess = false;\nlet emailSubject = null;\nlet emailBody = null;\nlet failureReason = null;\n\nif (!apiKey) {\n  failureReason =\n    'Missing OPENAI_API_KEY';\n} else if (!allPainPoints.length) {\n  failureReason =\n    'No evidence-based audit findings available';\n} else {\n  const systemPrompt = `\nYou are a senior digital marketing consultant for ${agencyName}.\n\nWrite a concise, personalized cold outreach email using only the audit evidence supplied by the user.\n\nRules:\n- Do not invent facts, metrics, or problems.\n- Mention 2 or 3 specific audit findings.\n- Tone must be professional, helpful, and consultative.\n- Do not sound aggressive or overly sales-focused.\n- Subject must be under 60 characters.\n- Body must be under 250 words.\n- Structure: short introduction, findings, how we can help, soft CTA.\n- Include this CTA exactly:\n  Book a free 15-minute strategy call: ${calendarLink}\n- Sign off:\n  The ${agencyName} Team\n\nReturn valid JSON only:\n{\n  \"subject\": \"email subject\",\n  \"body\": \"complete plain-text email\"\n}\n`.trim();\n\n  const userPrompt = `\nBusiness name: ${lead.business_name}\nIndustry: ${lead.category || 'Not available'}\nLocation: ${lead.city || ''}${\n    lead.state\n      ? ', ' + lead.state\n      : ''\n  }\nWebsite: ${lead.website_url || ''}\nGoogle rating: ${\n    lead.rating\n      ? `${lead.rating}/5 (${lead.review_count || 0} reviews)`\n      : 'Not available'\n  }\n\nAudit findings:\n${auditSummary}\n`.trim();\n\n  const http =\n    this.helpers.httpRequest;\n\n  let lastError =\n    'Unknown OpenAI error';\n\n  for (\n    let attempt = 1;\n    attempt <= 2;\n    attempt++\n  ) {\n    try {\n      const response = await http({\n        method: 'POST',\n        url:\n          'https://api.openai.com/v1/chat/completions',\n\n        headers: {\n          Authorization:\n            `Bearer ${apiKey}`,\n\n          'Content-Type':\n            'application/json',\n        },\n\n        body: {\n          model,\n\n          messages: [\n            {\n              role: 'system',\n              content: systemPrompt,\n            },\n            {\n              role: 'user',\n              content: userPrompt,\n            },\n          ],\n\n          response_format: {\n            type: 'json_object',\n          },\n\n          temperature: 0.4,\n          max_tokens: 650,\n        },\n\n        json: true,\n        timeout: 60000,\n      });\n\n      const content =\n        String(\n          response?.choices?.[0]\n            ?.message?.content || ''\n        ).trim();\n\n      if (!content) {\n        throw new Error(\n          'OpenAI returned empty content'\n        );\n      }\n\n      const parsed =\n        JSON.parse(content);\n\n      const subject =\n        String(\n          parsed.subject || ''\n        ).trim();\n\n      const body =\n        String(\n          parsed.body || ''\n        ).trim();\n\n      const wordCount =\n        body\n          .split(/\\s+/)\n          .filter(Boolean)\n          .length;\n\n      if (!subject) {\n        throw new Error(\n          'AI response missing subject'\n        );\n      }\n\n      if (\n        body.length < 50 ||\n        wordCount > 300\n      ) {\n        throw new Error(\n          'AI email body failed validation'\n        );\n      }\n\n      emailSubject =\n        subject.slice(0, 100);\n\n      emailBody = body;\n      auditSuccess = true;\n      lastError = null;\n\n      break;\n    } catch (error) {\n      lastError =\n        error.message ||\n        'OpenAI request failed';\n\n      if (attempt < 2) {\n        await new Promise(\n          (resolve) =>\n            setTimeout(resolve, 2000)\n        );\n      }\n    }\n  }\n\n  if (!auditSuccess) {\n    failureReason = lastError;\n  }\n}\n\nreturn{\n  json: {\n    id: lead.id,\n    business_name:\n      lead.business_name,\n    email: lead.email,\n    website_url:\n      lead.website_url,\n    city: lead.city,\n    state: lead.state,\n    category: lead.category,\n    rating: lead.rating,\n    review_count:\n      lead.review_count,\n    campaign_id:\n      lead.campaign_id,\n    retry_count:\n      lead.retry_count || 0,\n    pagespeed_mobile:\n      mobileScore,\n    pagespeed_desktop:\n      desktopScore,\n    seo_score:\n      seoScore,\n    website_pain_points:\n      websitePainPoints,\n    social_pain_points:\n      socialPainPoints,\n    audit_summary:\n      auditSummary,\n    pain_points_count:\n      allPainPoints.length,\n    audit_success:\n      auditSuccess,\n    email_subject:\n      emailSubject,\n    email_body:\n      emailBody,\n    failure_reason:\n      failureReason,\n  },\n};"
+      },
+      "id": "edea52cc-c775-4252-8ded-5537115ed7bb",
+      "name": "Code — Compile Audit & Call AI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        160
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.audit_success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "id": "audit-success-check-wf3"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "38c8719d-a52c-46ef-844c-064d980f4d08",
+      "name": "IF — Audit Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -336,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE public.leads\nSET\n  retry_count =\n    retry_count + 1,\n\n  failure_reason =\n    '{{ (\n      $json.failure_reason ||\n      \"Audit or email generation failed\"\n    ).replace(/'/g, \"''\") }}',\n\n  status =\n    CASE\n      WHEN retry_count + 1 >=\n        {{ $('config').first().json.maxRetries }}\n      THEN 'audit_failed'\n      ELSE 'enriched'\n    END,\n\n  updated_at = NOW()\n\nWHERE id = {{ $json.id }}\n  AND status = 'auditing'\n\nRETURNING\n  id,\n  status,\n  retry_count,\n  failure_reason;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "f8bf6f71-b7b0-40ab-92c2-2b3e7fcb86c5",
+      "name": "Postgres — Update audit_failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -96,
+        208
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "rv3d65xUqQa1nugc",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg =\n  $('config').first().json;\n\nconst safeAll = (nodeName) => {\n  try {\n    return $(nodeName).all();\n  } catch (_error) {\n    return [];\n  }\n};\n\nconst successfulDrafts =\n  safeAll(\n    'Postgres — Save Draft & pending_review'\n  );\n\nconst failedAttempts =\n  safeAll(\n    'Postgres — Update audit_failed'\n  );\n\nconst terminalFailures =\n  failedAttempts.filter(\n    (item) =>\n      item.json.status ===\n      'audit_failed'\n  );\n\nconst retryQueued =\n  failedAttempts.filter(\n    (item) =>\n      item.json.status ===\n      'enriched'\n  );\n\nconst successfulLeadIds =\n  successfulDrafts\n    .map(\n      (item) =>\n        item.json.lead_id\n    )\n    .filter(Boolean);\n\nconst failedLeadIds =\n  failedAttempts\n    .map(\n      (item) =>\n        item.json.id\n    )\n    .filter(Boolean);\n\nconst startedAt =\n  new Date(\n    cfg.runStartTs\n  ).getTime();\n\nconst durationMs =\n  Number.isFinite(startedAt)\n    ? Date.now() - startedAt\n    : 0;\n\nreturn [{\n  json: {\n    workflow_name:\n      cfg.workflowName ||\n      'audit_and_draft',\n\n    leads_processed:\n      successfulDrafts.length,\n\n    leads_failed:\n      failedAttempts.length,\n\n    terminal_failed:\n      terminalFailures.length,\n\n    retry_queued:\n      retryQueued.length,\n\n    duration_ms:\n      durationMs,\n\n    notes:\n      'WF3 audit_and_draft' +\n      ' | pending_review=' +\n      successfulDrafts.length +\n      ' | retry_queued=' +\n      retryQueued.length +\n      ' | audit_failed=' +\n      terminalFailures.length +\n      ' | success_ids=' +\n      (\n        successfulLeadIds.join(',') ||\n        'none'\n      ) +\n      ' | failed_ids=' +\n      (\n        failedLeadIds.join(',') ||\n        'none'\n      ),\n  },\n}];"
+      },
+      "id": "d4aa5a2d-bc9f-4e1a-b89e-58d34a774447",
+      "name": "Code — Summarize Run1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        544
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.workflow_logs (\n  workflow_name,\n  run_at,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n)\nVALUES (\n  '{{ (\n    $json.workflow_name ||\n    \"audit_and_draft\"\n  ).replace(/'/g, \"''\") }}',\n\n  NOW(),\n\n  {{ Number(\n    $json.leads_processed\n  ) || 0 }},\n\n  {{ Number(\n    $json.leads_failed\n  ) || 0 }},\n\n  {{ Number(\n    $json.duration_ms\n  ) || 0 }},\n\n  '{{ (\n    $json.notes ||\n    \"WF3 batch completed\"\n  ).replace(/'/g, \"''\") }}'\n)\n\nRETURNING id;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "8aa3c69e-5cd1-4f63-9b0e-d7b82a87b419",
+      "name": "Postgres — Workflow Log1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -80,
+        560
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "rv3d65xUqQa1nugc",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH existing_draft AS (\n  SELECT id\n  FROM public.email_drafts\n  WHERE lead_id = {{ $json.id }}\n    AND status = 'draft'\n  ORDER BY id DESC\n  LIMIT 1\n  FOR UPDATE\n),\n\nupdated_draft AS (\n  UPDATE public.email_drafts\n  SET\n    subject =\n      '{{ $json.email_subject\n        .replace(/'/g, \"''\") }}',\n\n    body =\n      '{{ $json.email_body\n        .replace(/'/g, \"''\") }}',\n\n    updated_at = NOW()\n\n  WHERE id = (\n    SELECT id\n    FROM existing_draft\n  )\n\n  RETURNING id\n),\n\ninserted_draft AS (\n  INSERT INTO public.email_drafts (\n    lead_id,\n    subject,\n    body,\n    status,\n    created_at,\n    updated_at\n  )\n\n  SELECT\n    {{ $json.id }},\n\n    '{{ $json.email_subject\n      .replace(/'/g, \"''\") }}',\n\n    '{{ $json.email_body\n      .replace(/'/g, \"''\") }}',\n\n    'draft',\n    NOW(),\n    NOW()\n\n  WHERE NOT EXISTS (\n    SELECT 1\n    FROM existing_draft\n  )\n\n  RETURNING id\n),\n\nsaved_draft AS (\n  SELECT id\n  FROM updated_draft\n\n  UNION ALL\n\n  SELECT id\n  FROM inserted_draft\n),\n\nupdated_lead AS (\n  UPDATE public.leads\n  SET\n    status = 'pending_review',\n\n    audit_summary =\n      '{{ (\n        $json.audit_summary || \"\"\n      ).replace(/'/g, \"''\") }}',\n\n    email_subject =\n      '{{ $json.email_subject\n        .replace(/'/g, \"''\") }}',\n\n    personalized_email =\n      '{{ $json.email_body\n        .replace(/'/g, \"''\") }}',\n\n    pagespeed_mobile =\n      {{ $json.pagespeed_mobile\n        ?? \"NULL\"\n      }},\n\n    pagespeed_desktop =\n      {{ $json.pagespeed_desktop\n        ?? \"NULL\"\n      }},\n\n    seo_score =\n      {{ $json.seo_score\n        ?? \"NULL\"\n      }},\n\n    website_pain_points =\n      '{{ JSON.stringify(\n        $json.website_pain_points || []\n      ).replace(/'/g, \"''\") }}'::jsonb,\n\n    social_pain_points =\n      '{{ JSON.stringify(\n        $json.social_pain_points || []\n      ).replace(/'/g, \"''\") }}'::jsonb,\n\n    retry_count = 0,\n    failure_reason = NULL,\n    audited_at = NOW(),\n    updated_at = NOW()\n\n  WHERE id = {{ $json.id }}\n    AND status = 'auditing'\n    AND EXISTS (\n      SELECT 1\n      FROM saved_draft\n    )\n\n  RETURNING id, status\n)\n\nSELECT\n  saved_draft.id AS draft_id,\n  updated_lead.id AS lead_id,\n  updated_lead.status\n\nFROM saved_draft\nCROSS JOIN updated_lead;",
+        "options": {
+          "queryBatching": "single"
+        }
+      },
+      "id": "d66265cd-105c-4e87-9913-3c5fe9a7679d",
+      "name": "Postgres — Save Draft & pending_review",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -96,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "rv3d65xUqQa1nugc",
+          "name": "Postgres account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf3-ai-draft",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2752,
+        320
+      ],
+      "id": "0f867329-0d4f-4011-b72c-afc0fa317a91",
+      "name": "Webhook",
+      "webhookId": "161175bf-ece7-42d7-800b-b8d4cb3a9609"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "config": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Recover Stuck Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Recover Stuck Leads": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Fetch & Lock Enriched Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Fetch & Lock Enriched Leads": {
+      "main": [
+        [
+          {
+            "node": "IF — Has Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Has Leads": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Log Empty Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split in Batches": {
+      "main": [
+        [
+          {
+            "node": "Code — Summarize Run1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code — Scrape Social",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Scrape Social": {
+      "main": [
+        [
+          {
+            "node": "Code — Compile Audit & Call AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Compile Audit & Call AI": {
+      "main": [
+        [
+          {
+            "node": "IF — Audit Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Audit Success": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Save Draft & pending_review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres — Update audit_failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Update audit_failed": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Summarize Run1": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Workflow Log1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres — Save Draft & pending_review": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4589d226-6dec-4c58-88ac-a4ba7c9bf1ac",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5487c2cd22f827f5757f582350d3188530ab4fbc0c2407b94d0f386c9fac1637"
+  },
+  "nodeGroups": [],
+  "id": "Y0nEc68Gu556N82e",
+  "tags": []
+}

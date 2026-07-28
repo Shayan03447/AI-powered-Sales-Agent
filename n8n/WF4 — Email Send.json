@@ -16,7 +16,8 @@
       "name": "Schedule Trigger — Every 30 min",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-1680, 400]
+      "position": [-1680, 400],
+      "disabled": true
     },
     {
       "parameters": {},
@@ -25,6 +26,20 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [-1680, 560]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf4-send",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "44444444-4444-4444-4444-444444444400",
+      "name": "Webhook — Send Approved",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1680, 720],
+      "webhookId": "wf4-send-webhook"
     },
     {
       "parameters": {
@@ -46,13 +61,13 @@
               "id": "cfg-from-email",
               "name": "fromEmail",
               "type": "string",
-              "value": "={{ $env.SMTP_FROM_EMAIL || 'sales@yourdomain.com' }}"
+              "value": "={{ $env.RESEND_FROM_EMAIL || $env.SMTP_FROM_EMAIL || 'sales@yourdomain.com' }}"
             },
             {
               "id": "cfg-from-name",
               "name": "fromName",
               "type": "string",
-              "value": "={{ $env.SMTP_FROM_NAME || $env.AGENCY_NAME || 'Atrium Solution' }}"
+              "value": "={{ $env.RESEND_FROM_NAME || $env.SMTP_FROM_NAME || $env.AGENCY_NAME || 'Atrium Solution' }}"
             },
             {
               "id": "cfg-start",
@@ -212,33 +227,40 @@
     },
     {
       "parameters": {
-        "fromEmail": "={{ $('config').first().json.fromName + ' <' + $('config').first().json.fromEmail + '>' }}",
-        "toEmail": "={{ $json.email }}",
-        "subject": "={{ $json.email_subject }}",
-        "emailFormat": "text",
-        "text": "={{ $json.email_body }}",
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.RESEND_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": {{ JSON.stringify($('config').first().json.fromName + ' <' + $('config').first().json.fromEmail + '>') }},\n  \"to\": [{{ JSON.stringify($json.email) }}],\n  \"subject\": {{ JSON.stringify($json.email_subject) }},\n  \"text\": {{ JSON.stringify($json.email_body) }}\n}",
         "options": {}
       },
       "id": "44444444-4444-4444-4444-444444444411",
-      "name": "SMTP — Send Approved Email",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "name": "Resend — Send Approved Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [240, 240],
-      "continueOnFail": true,
-      "credentials": {
-        "smtp": {
-          "id": "REPLACE_WITH_SMTP_CREDENTIAL_ID",
-          "name": "SMTP account"
-        }
-      }
+      "continueOnFail": true
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const lead = $('Code — Validate Approved Email').item.json;\nconst errorValue = $json.error;\nconst sendSuccess = !errorValue;\nlet smtpResponse;\n\nif (sendSuccess) {\n  try {\n    smtpResponse = JSON.stringify($json || {}).slice(0, 2000);\n  } catch (_e) {\n    smtpResponse = 'SMTP accepted the message';\n  }\n} else {\n  smtpResponse = String(errorValue.message || errorValue.description || errorValue).slice(0, 2000);\n}\n\nreturn [{\n  json: {\n    ...lead,\n    send_success: sendSuccess,\n    smtp_response: smtpResponse || (sendSuccess ? 'SMTP accepted the message' : 'Unknown SMTP error'),\n    send_error: sendSuccess ? null : (smtpResponse || 'Unknown SMTP error')\n  }\n}];"
+        "jsCode": "const lead = $('Code — Validate Approved Email').item.json;\nconst errorValue = $json.error;\nconst resendId = $json.id;\nconst statusCode = Number($json.statusCode || $json.status || 0);\nconst sendSuccess =\n  !errorValue &&\n  (!!resendId || (statusCode >= 200 && statusCode < 300));\n\nlet providerResponse;\nif (sendSuccess) {\n  try {\n    providerResponse = JSON.stringify($json || {}).slice(0, 2000);\n  } catch (_e) {\n    providerResponse = resendId\n      ? 'Resend accepted id=' + resendId\n      : 'Resend accepted the message';\n  }\n} else {\n  const msg =\n    (errorValue && (errorValue.message || errorValue.description || errorValue)) ||\n    $json.message ||\n    'Resend send failed';\n  providerResponse = String(msg).slice(0, 2000);\n}\n\nreturn [{\n  json: {\n    ...lead,\n    send_success: sendSuccess,\n    smtp_response: providerResponse,\n    send_error: sendSuccess ? null : providerResponse\n  }\n}];"
       },
       "id": "44444444-4444-4444-4444-444444444412",
-      "name": "Code — Normalize SMTP Result",
+      "name": "Code — Normalize Resend Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [480, 240]
@@ -386,6 +408,17 @@
         ]
       ]
     },
+    "Webhook — Send Approved": {
+      "main": [
+        [
+          {
+            "node": "config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "config": {
       "main": [
         [
@@ -470,7 +503,7 @@
       "main": [
         [
           {
-            "node": "SMTP — Send Approved Email",
+            "node": "Resend — Send Approved Email",
             "type": "main",
             "index": 0
           }
@@ -484,18 +517,18 @@
         ]
       ]
     },
-    "SMTP — Send Approved Email": {
+    "Resend — Send Approved Email": {
       "main": [
         [
           {
-            "node": "Code — Normalize SMTP Result",
+            "node": "Code — Normalize Resend Result",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code — Normalize SMTP Result": {
+    "Code — Normalize Resend Result": {
       "main": [
         [
           {
@@ -575,7 +608,7 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "wf4-email-send-v1-atrium-2026",
+  "versionId": "wf4-email-send-v2-resend-2026",
   "meta": {
     "templateCredsSetupCompleted": false,
     "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"

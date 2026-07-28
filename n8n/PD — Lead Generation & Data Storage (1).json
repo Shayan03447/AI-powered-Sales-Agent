@@ -5,13 +5,13 @@
       "parameters": {
         "jsCode": "const items = $input.all();\nconst seen = new Map();\n\nconst clean = (value) =>\n  String(value || '').toLowerCase().trim().replace(/\\s+/g, ' ');\n\nfor (const item of items) {\n  const lead = item.json;\n  const name = clean(lead.business_name);\n  const address = clean(lead.address);\n  const phone = String(lead.phone || '').replace(/\\D/g, '');\n  const city = clean(lead.city);\n\n  const key = address\n    ? `${name}||${address}`\n    : phone\n      ? `${name}||${phone}`\n      : `${name}||${city}`;\n\n  if (!seen.has(key)) {\n    seen.set(key, item);\n  } else {\n    const existing = seen.get(key);\n\n    if (lead.source === 'gmb' && existing.json.source !== 'gmb') {\n      seen.set(key, item);\n    }\n  }\n}\n\nreturn Array.from(seen.values());"
       },
-      "id": "fb80afd4-7d53-4046-bcd1-d875b6855ffd",
+      "id": "db2c238a-111f-4d0c-8da7-96c744390404",
       "name": "Code — Deduplicate",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1184,
-        1728
+        832,
+        160
       ]
     },
     {
@@ -20,84 +20,21 @@
         "query": "UPDATE campaigns\nSET\n  status = 'error',\n  completed_at = NOW(),\n  error_reason = 'WF1 execution failed — check n8n execution log for details'\nWHERE id = {{ $('Postgres — Create Campaign1').first().json.id }};",
         "options": {}
       },
-      "id": "a3e9314f-2e24-43e8-b48b-7b9a68bf482e",
+      "id": "a611c37c-6b90-40a0-bb74-43ac870ceec2",
       "name": "Postgres — Mark Campaign Failed",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "executeOnce": true,
       "position": [
-        -1216,
-        2096
+        800,
+        528
       ],
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
-    },
-    {
-      "parameters": {
-        "formTitle": "Lead Generation Search",
-        "formDescription": "Enter your search criteria to find new business leads.",
-        "formFields": {
-          "values": [
-            {
-              "fieldLabel": "Business Type",
-              "placeholder": "e.g. real estate agency, plumber, dentist",
-              "requiredField": true
-            },
-            {
-              "fieldLabel": "City",
-              "placeholder": "e.g. Melbourne, Sydney, Brisbane",
-              "requiredField": true
-            },
-            {
-              "fieldLabel": "Country",
-              "placeholder": "US, AU"
-            },
-            {
-              "fieldLabel": "Source",
-              "fieldType": "dropdown",
-              "fieldOptions": {
-                "values": [
-                  {
-                    "option": "yelp"
-                  },
-                  {
-                    "option": "gmb"
-                  },
-                  {
-                    "option": "both"
-                  }
-                ]
-              },
-              "requiredField": true
-            },
-            {
-              "fieldLabel": "Max Results",
-              "fieldType": "number",
-              "placeholder": "50"
-            }
-          ]
-        },
-        "options": {
-          "respondWithOptions": {
-            "values": {
-              "formSubmittedText": "Campaign started. Leads will be saved with status new or no_website. Check n8n execution for details."
-            }
-          }
-        }
-      },
-      "id": "bb09ff23-b970-4779-b8a7-1404fcff4052",
-      "name": "Form Trigger — Search Input1",
-      "type": "n8n-nodes-base.formTrigger",
-      "typeVersion": 2.2,
-      "position": [
-        -3136,
-        1728
-      ],
-      "webhookId": "d9e4ac89-60a0-4cdb-a508-85a81ced89f4"
     },
     {
       "parameters": {
@@ -105,32 +42,32 @@
         "query": "INSERT INTO campaigns (business_type, city, country, source, max_results, search_query, status)\nVALUES (\n  '{{ ($json.business_type || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.city || \"\").substring(0, 255).replace(/'/g, \"''\") }}',\n  '{{ ($json.country || \"\").substring(0, 10).replace(/'/g, \"''\") }}',\n  '{{ ($json.source || \"\").substring(0, 20).replace(/'/g, \"''\") }}',\n  {{ $json.limit }},\n  '{{ ($json.search_query || \"\").replace(/'/g, \"''\") }}',\n  'running'\n)\nRETURNING id;",
         "options": {}
       },
-      "id": "ae546041-93a2-4c1b-92cd-935d54dd88e8",
+      "id": "32bca0fc-c6c8-42e2-8fd3-fab1ed907ce4",
       "name": "Postgres — Create Campaign1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -2688,
-        1728
+        -672,
+        160
       ],
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const cfg = $('Set Search Parameters1').first().json;\nconst campaignId = $('Postgres — Create Campaign1').first().json.id;\nconst sources = cfg.source === 'both' ? ['yelp', 'gmb'] : [cfg.source];\n\nreturn sources.map((active_source) => ({\n  json: {\n    ...cfg,\n    campaign_id: campaignId,\n    active_source,\n  },\n}));"
+        "jsCode": "const cfg = $('Set From Webhook').first().json;\nconst campaignId = $('Postgres — Create Campaign1').first().json.id;\nconst sources = cfg.source === 'both' ? ['yelp', 'gmb'] : [cfg.source];\n\nreturn sources.map((active_source) => ({\n  json: {\n    ...cfg,\n    campaign_id: campaignId,\n    active_source,\n  },\n}));"
       },
-      "id": "03b6a275-9323-41be-b7ba-1d7db430220c",
+      "id": "a98ebb44-e55d-4d1f-8717-7f27441354d9",
       "name": "Code — Expand Sources1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2464,
-        1728
+        -448,
+        160
       ]
     },
     {
@@ -189,13 +126,13 @@
         },
         "options": {}
       },
-      "id": "86f4b539-07c4-4a6c-a12a-42ce92ec151f",
+      "id": "e4211854-1253-419d-9bd3-15c5906f03cf",
       "name": "Switch — Source1",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -2240,
-        1728
+        -224,
+        160
       ]
     },
     {
@@ -231,13 +168,13 @@
           "timeout": 30000
         }
       },
-      "id": "d1f62c3a-5434-4690-9750-b2d6f8ad1568",
+      "id": "226e4eef-f70b-41f7-a413-007f2ebf0fe4",
       "name": "Yelp API — Search1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -2016,
-        1568
+        0,
+        0
       ],
       "onError": "continueErrorOutput"
     },
@@ -245,13 +182,13 @@
       "parameters": {
         "jsCode": "const cfg = $('Code — Expand Sources1').item.json;\nconst businesses = $input.first().json.businesses || [];\n\nif (!businesses.length) return [];\n\nreturn businesses.map((b) => ({\n  json: {\n    external_id: `yelp_${b.id}`,\n    source: 'yelp',\n    business_name: b.name || '',\n    category: (b.categories || []).map((c) => c.title).join(', '),\n    phone: b.display_phone || b.phone || '',\n    address: (b.location?.display_address || []).join(', '),\n    city: b.location?.city || cfg.city,\n    state: b.location?.state || '',\n    country: b.location?.country || cfg.country,\n    website_url: b.url || '',\n    rating: b.rating ?? null,\n    review_count: b.review_count ?? null,\n    status: b.url ? 'new' : 'no_website',\n    failure_reason: b.url ? null : 'No website URL found in Yelp listing',\n    search_query: cfg.search_query,\n    campaign_id: cfg.campaign_id,\n    yelp_id: b.id,\n  },\n}));"
       },
-      "id": "0c289a79-3ed1-4309-8a88-3d43b05f3ba1",
+      "id": "9d85fbac-ca1a-4a60-bf70-e8594ed240c1",
       "name": "Code — Normalize Yelp1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1792,
-        1568
+        224,
+        0
       ]
     },
     {
@@ -296,26 +233,26 @@
           "timeout": 30000
         }
       },
-      "id": "644c8320-2937-49e4-acaa-30068bbbe648",
+      "id": "898f1400-f4e8-49dc-b061-3aea26eb3cee",
       "name": "Google Places — Text Search1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -2016,
-        1888
+        0,
+        320
       ]
     },
     {
       "parameters": {
         "jsCode": "const cfg = $('Code — Expand Sources1').first().json;\nconst limit = Number(cfg.limit) || 10;\n\n\nconst pages = $input.all();\nconst allPlaces = pages.flatMap((item) =>\n  Array.isArray(item.json.places) ? item.json.places : []\n);\n\n// Google place ID ke through duplicates remove karo\nconst seenIds = new Set();\nconst places = allPlaces.filter((place) => {\n  const id = String(place.id || '').replace('places/', '');\n\n  if (!id || seenIds.has(id)) {\n    return false;\n  }\n\n  seenIds.add(id);\n  return true;\n});\n\n// User ki requested limit pagination ke baad apply karo\nreturn places.slice(0, limit).map((p) => {\n  const rawId = String(p.id || '').replace('places/', '');\n  const website = String(p.websiteUri || '').trim();\n  const hasWebsite = website.length > 0;\n\n  return {\n    json: {\n      external_id: `gmb_${rawId}`,\n      source: 'gmb',\n      business_name: p.displayName?.text || '',\n      category: p.primaryType || '',\n      phone: p.nationalPhoneNumber || '',\n      address: p.formattedAddress || '',\n      city: cfg.city || '',\n      state: '',\n      country: cfg.country || 'AU',\n      website_url: website,\n      google_url: rawId\n        ? `https://www.google.com/maps/place/?q=place_id:${rawId}`\n        : '',\n      rating: p.rating ?? null,\n      review_count: p.userRatingCount ?? null,\n      search_query: cfg.search_query || '',\n      campaign_id: cfg.campaign_id,\n      status: hasWebsite ? 'new' : 'no_website',\n      failure_reason: hasWebsite\n        ? null\n        : 'No website URL in Google Maps listing',\n    },\n  };\n});"
       },
-      "id": "6529f8ec-365c-477d-9210-742bbffba08a",
+      "id": "adb72e08-556b-43ea-b691-b3294b02e9d6",
       "name": "Code — Normalize GMB1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1792,
-        1888
+        224,
+        320
       ]
     },
     {
@@ -362,13 +299,13 @@
         "looseTypeValidation": true,
         "options": {}
       },
-      "id": "102d9e56-05dc-4cd9-8bf9-8d4b3d77b51a",
+      "id": "1db84b90-fa3a-4d70-b7a0-9768eff16671",
       "name": "Filter — Valid Leads1",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
       "position": [
-        -1376,
-        1728
+        640,
+        160
       ]
     },
     {
@@ -379,18 +316,18 @@
           "queryBatching": "single"
         }
       },
-      "id": "0b7e9677-f7b9-496f-ad60-9b3ad3bfac92",
+      "id": "3cd886dc-9d29-40c3-850c-8685704b7218",
       "name": "Postgres — Insert Lead1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -784,
-        1856
+        1232,
+        288
       ],
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       },
@@ -398,15 +335,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const cfg = $('Set Search Parameters1').first().json;\nconst campaignId = $('Postgres — Create Campaign1').first().json.id;\nconst leads = $('Code — Deduplicate').all();\n\nlet rawCount = 0;\ntry { rawCount += $('Code — Normalize GMB1').all().length; } catch(e) {}\ntry { rawCount += $('Code — Normalize Yelp1').all().length; } catch(e) {}\n\nconst startedAt = cfg.started_at\n  ? new Date(cfg.started_at).getTime()\n  : Date.now();\n\nreturn [{\n  json: {\n    campaign_id: campaignId,\n    leads_found: rawCount,\n    leads_processed: leads.length,\n    leads_failed: Math.max(0, rawCount - leads.length),\n    duration_ms: Date.now() - startedAt,\n    notes: `WF1 lead_generation | ${cfg.search_query} | source=${cfg.source}`,\n  },\n}];"
+        "jsCode": "const cfg = $('Set From Webhook').first().json;\nconst campaignId = $('Postgres — Create Campaign1').first().json.id;\nconst leads = $('Code — Deduplicate').all();\n\nlet rawCount = 0;\ntry { rawCount += $('Code — Normalize GMB1').all().length; } catch(e) {}\ntry { rawCount += $('Code — Normalize Yelp1').all().length; } catch(e) {}\n\nconst startedAt = cfg.started_at\n  ? new Date(cfg.started_at).getTime()\n  : Date.now();\n\nreturn [{\n  json: {\n    campaign_id: campaignId,\n    leads_found: rawCount,\n    leads_processed: leads.length,\n    leads_failed: Math.max(0, rawCount - leads.length),\n    duration_ms: Date.now() - startedAt,\n    notes: `WF1 lead_generation | ${cfg.search_query} | source=${cfg.source}`,\n  },\n}];"
       },
-      "id": "96eeb92a-4beb-4669-bd4b-15e960c6864f",
+      "id": "bb8eede2-76af-499b-b7c6-4af67a6541ec",
       "name": "Code — Summarize Run1",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -592,
-        1728
+        1424,
+        160
       ],
       "executeOnce": true
     },
@@ -416,17 +353,17 @@
         "query": "UPDATE campaigns\nSET\n  leads_found = {{ $json.leads_found }},\n  leads_inserted = (SELECT COUNT(*) FROM leads WHERE campaign_id = {{ $json.campaign_id }}),\n  status = 'completed',\n  completed_at = NOW()\nWHERE id = {{ $json.campaign_id }};",
         "options": {}
       },
-      "id": "72640b3b-2742-4089-abc5-24b8763cb473",
+      "id": "f85fd41b-393e-4db6-b422-b9c1a69fcc5a",
       "name": "Postgres — Update Campaign1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -352,
-        1584
+        1664,
+        16
       ],
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
@@ -437,86 +374,21 @@
         "query": "INSERT INTO workflow_logs (\n  workflow_name,\n  leads_processed,\n  leads_failed,\n  duration_ms,\n  notes\n)\nVALUES (\n  'lead_generation',\n  {{ $json.leads_processed || 0 }},\n  {{ $json.leads_failed || 0 }},\n  {{ $json.duration_ms || 0 }},\n  '{{ ($json.notes || \"WF1 completed\").replace(/'/g, \"''\") }}'\n);",
         "options": {}
       },
-      "id": "dc9c5d6f-f454-4fdf-ba50-d19a4b0378a7",
+      "id": "aa8eaae4-b24a-46a8-8590-4f50128f902a",
       "name": "Postgres — Workflow Log1",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -320,
-        1760
+        1696,
+        192
       ],
       "executeOnce": true,
       "credentials": {
         "postgres": {
-          "id": "7SbKHyrjW8tGkhcu",
+          "id": "rv3d65xUqQa1nugc",
           "name": "Postgres account"
         }
       }
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "a1",
-              "name": "business_type",
-              "value": "={{ $json['Business Type'].trim() }}",
-              "type": "string"
-            },
-            {
-              "id": "a2",
-              "name": "city",
-              "value": "={{ $json['City'].trim() }}",
-              "type": "string"
-            },
-            {
-              "id": "a3",
-              "name": "country",
-              "value": "={{ ($json['Country'] || 'US').trim() }}",
-              "type": "string"
-            },
-            {
-              "id": "a4",
-              "name": "location",
-              "value": "={{ $json['City'].trim() + ', ' + ($json['Country'] || 'US').trim() }}",
-              "type": "string"
-            },
-            {
-              "id": "a5",
-              "name": "source",
-              "value": "={{ $json['Source'] }}",
-              "type": "string"
-            },
-            {
-              "id": "a6",
-              "name": "limit",
-              "value": "={{ Math.min(Number($json['Max Results']) || 20, 20) }}",
-              "type": "number"
-            },
-            {
-              "id": "a7",
-              "name": "search_query",
-              "value": "={{ $json['Business Type'].trim() + ' in ' + $json['City'].trim() + ', ' + ($json['Country'] || 'US').trim() }}",
-              "type": "string"
-            },
-            {
-              "id": "a8",
-              "name": "started_at",
-              "value": "={{ new Date().toISOString() }}",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "019a42c3-cdff-4caa-820b-b9dd1b8345e3",
-      "name": "Set Search Parameters1",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -2912,
-        1728
-      ]
     },
     {
       "parameters": {
@@ -525,11 +397,92 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -976,
-        1616
+        1040,
+        48
       ],
-      "id": "794b6e80-cabe-48b9-9afc-5aaa78a221cb",
+      "id": "cc3744cf-0c76-4172-b116-8b26aa8ba44c",
       "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wf1-find-leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1104,
+        160
+      ],
+      "id": "f791a168-9a17-48b6-9743-78aa21f9df73",
+      "name": "Webhook",
+      "webhookId": "10ca3457-b6fe-411a-8cdf-52c764f4b086"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "business_type",
+              "value": "={{ $json.body.business_type }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "city",
+              "value": "={{ $json.body.city }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "country",
+              "value": "={{ $json.body.country }}",
+              "type": "string"
+            },
+            {
+              "id": "a4",
+              "name": "location",
+              "value": "={{ $json.body.location }}",
+              "type": "string"
+            },
+            {
+              "id": "a5",
+              "name": "source",
+              "value": "={{ $json.body.source }}",
+              "type": "string"
+            },
+            {
+              "id": "a6",
+              "name": "limit",
+              "value": "={{ $json.body.limit }}",
+              "type": "number"
+            },
+            {
+              "id": "a7",
+              "name": "search_query",
+              "value": "={{ $json.body.search_query }}",
+              "type": "string"
+            },
+            {
+              "id": "a8",
+              "name": "started_at",
+              "value": "={{ $json.body.started_at }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8d769371-c59a-4720-8004-b0eed1a2b49b",
+      "name": "Set From Webhook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -896,
+        160
+      ]
     }
   ],
   "pinData": {},
@@ -539,17 +492,6 @@
         [
           {
             "node": "Loop Over Items",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Form Trigger — Search Input1": {
-      "main": [
-        [
-          {
-            "node": "Set Search Parameters1",
             "type": "main",
             "index": 0
           }
@@ -598,13 +540,7 @@
             "type": "main",
             "index": 0
           }
-        ],
-        []
-      ]
-    },
-    "Code — Normalize Yelp1": {
-      "main": [
-        []
+        ]
       ]
     },
     "Google Places — Text Search1": {
@@ -615,8 +551,7 @@
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
     "Code — Normalize GMB1": {
@@ -675,27 +610,6 @@
         ]
       ]
     },
-    "Postgres — Update Campaign1": {
-      "main": [
-        []
-      ]
-    },
-    "Set Search Parameters1": {
-      "main": [
-        [
-          {
-            "node": "Postgres — Create Campaign1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Postgres — Workflow Log1": {
-      "main": [
-        []
-      ]
-    },
     "Loop Over Items": {
       "main": [
         [
@@ -713,20 +627,42 @@
           }
         ]
       ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set From Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set From Webhook": {
+      "main": [
+        [
+          {
+            "node": "Postgres — Create Campaign1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "5e7a4647-72a0-4160-9a9f-d596c03ac94d",
+  "versionId": "50bab29b-dae2-4619-9188-c9f45aa1b5b3",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "dd18beb31c4f13253473986abcc2bd8c63e76884cfbb90e805b8193bbe5a1a62"
+    "instanceId": "5487c2cd22f827f5757f582350d3188530ab4fbc0c2407b94d0f386c9fac1637"
   },
   "nodeGroups": [],
-  "id": "bb2SopyjUR9Ci8vk",
+  "id": "yt5xpEPE8tcT1IQG",
   "tags": []
 }

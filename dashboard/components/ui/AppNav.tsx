@@ -11,6 +11,7 @@ const links = [
   { href: "/research", label: "Research" },
   { href: "/ai-draft", label: "AI Draft" },
   { href: "/drafts", label: "Drafts" },
+  { href: "/send", label: "Send" },
   { href: "/campaigns", label: "Campaigns" },
   { href: "/leads", label: "Leads" },
 ];

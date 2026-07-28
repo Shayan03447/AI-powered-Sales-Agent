@@ -118,3 +118,25 @@ export async function triggerWf3(options?: {
     started_at: new Date().toISOString(),
   });
 }
+
+/**
+ * WF4 — Send approved emails (Resend via n8n)
+ * Picks status=approved + approved email_drafts → sent / send_failed
+ */
+export async function triggerWf4(options?: {
+  batchSize?: number;
+}): Promise<{ ok: boolean; status: number; body: string }> {
+  const url = process.env.N8N_WF4_WEBHOOK_URL?.trim();
+
+  if (!url) {
+    throw new Error(
+      "Add N8N_WF4_WEBHOOK_URL in .env.local — see PART_6_TEST.md"
+    );
+  }
+
+  return postJson(url, {
+    trigger: "dashboard",
+    batchSize: options?.batchSize ?? 5,
+    started_at: new Date().toISOString(),
+  });
+}

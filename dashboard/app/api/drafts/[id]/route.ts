@@ -154,7 +154,7 @@ export async function POST(
         action: "approve",
         lead_id: leadId,
         status: "approved",
-        message: "Approved — queued until email send is enabled.",
+        message: "Approved — ready on the Send page.",
       });
     }
 
