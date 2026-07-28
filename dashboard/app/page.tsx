@@ -39,7 +39,7 @@ export default function HomePage() {
         <Link href="/drafts" className="action-tile">
           <span className="tile-step">04</span>
           <h2>Drafts</h2>
-          <p>Review AI email drafts and audits.</p>
+          <p>Approve, edit, or reject AI emails.</p>
         </Link>
       </section>
     </main>

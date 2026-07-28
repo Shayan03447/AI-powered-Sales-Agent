@@ -13,12 +13,20 @@ async function getDrafts() {
               email, email_subject, personalized_email, audit_summary,
               pagespeed_score, seo_score, failure_reason
        FROM leads
-       WHERE status IN ('auditing', 'pending_review', 'audit_failed')
+       WHERE status IN (
+         'auditing',
+         'pending_review',
+         'audit_failed',
+         'approved',
+         'rejected'
+       )
        ORDER BY
          CASE status
            WHEN 'auditing' THEN 0
            WHEN 'pending_review' THEN 1
-           ELSE 2
+           WHEN 'approved' THEN 2
+           WHEN 'rejected' THEN 3
+           ELSE 4
          END,
          updated_at DESC NULLS LAST,
          id DESC
@@ -43,7 +51,7 @@ export default async function DraftsPage() {
           <p className="eyebrow">Data</p>
           <h1>Drafts</h1>
           <p className="muted">
-            AI email drafts + audits — table/cards only (approve in Part 5)
+            Review AI emails — Approve, Edit, or Reject before send
           </p>
         </div>
         <div className="page-head-actions">

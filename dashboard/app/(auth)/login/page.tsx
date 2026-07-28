@@ -1,3 +1,18 @@
+import { Suspense } from "react";
+import LoginForm from "@/components/auth/LoginForm";
+
 export default function LoginPage() {
-  return <main><p>Login — Part 0b (later)</p></main>;
+  return (
+    <Suspense
+      fallback={
+        <main className="fade-in login-page">
+          <div className="card login-card">
+            <p className="muted">Loading…</p>
+          </div>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
 }

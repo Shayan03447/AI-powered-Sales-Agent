@@ -1,5 +1,6 @@
 import type { Lead } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
+import DraftReviewActions from "@/components/drafts/DraftReviewActions";
 import Link from "next/link";
 
 export type DraftLead = Lead & {
@@ -39,6 +40,19 @@ export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
             <div className="banner banner-loading">AI writing draft…</div>
           )}
 
+          {d.status === "approved" && (
+            <div className="banner banner-ok">
+              Approved — ready for Send (Part 6).
+            </div>
+          )}
+
+          {d.status === "rejected" && (
+            <div className="banner banner-bad">
+              Rejected — will not be sent
+              {d.failure_reason ? `: ${d.failure_reason}` : "."}
+            </div>
+          )}
+
           {d.email_subject && (
             <p>
               <strong>Subject:</strong> {d.email_subject}
@@ -61,6 +75,14 @@ export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
 
           {!d.email_subject && d.status === "pending_review" && (
             <p className="muted">Draft fields empty — check WF3 save step.</p>
+          )}
+
+          {d.status === "pending_review" && (
+            <DraftReviewActions
+              leadId={d.id}
+              subject={d.email_subject ?? ""}
+              body={d.personalized_email ?? ""}
+            />
           )}
         </article>
       ))}
