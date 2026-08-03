@@ -130,7 +130,7 @@ main {
 }
 
 h1 {
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: clamp(1.8rem, 3vw, 2.4rem);
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -138,8 +138,12 @@ h1 {
   line-height: 1.15;
 }
 
-h2 {
+.hero-panel h1 {
   font-family: var(--font-display), Georgia, serif;
+}
+
+h2 {
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 1.2rem;
   margin: 0 0 8px;
   font-weight: 600;
@@ -578,7 +582,6 @@ button.btn-danger:hover:not(:disabled) {
 
 .login-brand h1 {
   margin: 0;
-  font-family: var(--font-display), Georgia, serif;
   font-size: 1.55rem;
 }
 

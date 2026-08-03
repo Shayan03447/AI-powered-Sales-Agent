@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { pickSuburb } from "@/lib/leads/metro-suburbs";
 import { triggerWf1 } from "@/lib/n8n/client";
 
 export async function POST(request: Request) {
@@ -17,12 +19,31 @@ export async function POST(request: Request) {
       );
     }
 
+    const countRows = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM campaigns
+       WHERE LOWER(TRIM(business_type)) = LOWER(TRIM($1))
+         AND LOWER(TRIM(city)) = LOWER(TRIM($2))`,
+      [businessType, city]
+    );
+    const campaignCount = Number(countRows[0]?.count || 0);
+    const picked = pickSuburb(city, campaignCount);
+
+    const searchQuery = picked
+      ? `${businessType} in ${picked.suburb}, ${country}`
+      : undefined;
+    const location = picked
+      ? `${picked.suburb}, ${country}`
+      : undefined;
+
     const result = await triggerWf1({
       businessType,
       city,
       country,
       source,
       maxResults,
+      searchQuery,
+      location,
     });
 
     if (!result.ok) {
@@ -36,13 +57,20 @@ export async function POST(request: Request) {
       );
     }
 
+    const rotationNote = picked
+      ? ` Search area: ${picked.suburb} (metro rotation #${campaignCount + 1}).`
+      : "";
+
     return NextResponse.json({
       ok: true,
       mode: result.mode,
+      suburb: picked?.suburb ?? null,
+      search_query: searchQuery ?? `${businessType} in ${city}, ${country}`,
       message:
         "WF1 started via " +
         result.mode +
-        ". Wait, then Refresh list. Campaign should show type + city (not empty).",
+        ". Wait, then Refresh list. Campaign should show type + city (not empty)." +
+        rotationNote,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

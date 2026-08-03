@@ -8,6 +8,10 @@ export type Wf1Payload = {
   country?: string;
   source?: "yelp" | "gmb" | "both";
   maxResults?: number;
+  /** When set (suburb rotation), Google uses this instead of `{type} in {city}`. */
+  searchQuery?: string;
+  /** Optional location string for n8n; defaults to `{city}, {country}`. */
+  location?: string;
 };
 
 async function postJson(
@@ -36,14 +40,18 @@ export async function triggerWf1(payload: Wf1Payload): Promise<{
   const country = payload.country || "AU";
   const source = payload.source || "both";
   const limit = Math.min(Number(payload.maxResults) || 20, 20);
-  const search_query = `${payload.businessType} in ${payload.city}, ${country}`;
+  const search_query =
+    payload.searchQuery?.trim() ||
+    `${payload.businessType} in ${payload.city}, ${country}`;
+  const location =
+    payload.location?.trim() || `${payload.city}, ${country}`;
 
   if (webhookUrl) {
     const result = await postJson(webhookUrl, {
       business_type: payload.businessType,
       city: payload.city,
       country,
-      location: `${payload.city}, ${country}`,
+      location,
       source,
       limit,
       search_query,

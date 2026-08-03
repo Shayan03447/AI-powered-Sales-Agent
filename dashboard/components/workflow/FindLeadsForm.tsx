@@ -44,8 +44,13 @@ export default function FindLeadsForm() {
         return;
       }
 
+      const suburbNote = data.suburb
+        ? ` Searching near ${data.suburb}.`
+        : "";
       setMessage(
-        "Search started. New campaign will appear on the Campaigns page in about 30–90 seconds."
+        "Search started." +
+          suburbNote +
+          " New campaign will appear on the Campaigns page in about 30–90 seconds."
       );
 
       setTimeout(() => {
@@ -65,6 +70,10 @@ export default function FindLeadsForm() {
       <p className="muted">
         Enter business type and city. The system will search and save results.
         Check progress on the Campaigns and Leads pages.
+      </p>
+      <p className="muted">
+        Large metros (Sydney, Melbourne, Brisbane, Perth, Adelaide) rotate
+        suburbs on each run so Google returns a fresher set of businesses.
       </p>
 
       {loading && (
