@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BrandLogo from "@/components/ui/BrandLogo";
+import Button from "@/components/ui/Button";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -77,9 +78,9 @@ export default function LoginForm() {
             />
           </label>
 
-          <button type="submit" disabled={loading}>
+          <Button type="submit" loading={loading}>
             {loading ? "Signing in…" : "Sign in"}
-          </button>
+          </Button>
 
           {error && <p className="error-box">{error}</p>}
         </form>

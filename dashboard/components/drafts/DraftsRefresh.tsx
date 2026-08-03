@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Button from "@/components/ui/Button";
 
 export default function DraftsRefresh({
   hasInProgress,
@@ -25,14 +26,9 @@ export default function DraftsRefresh({
 
   return (
     <div className="page-head-actions">
-      <button
-        type="button"
-        className="btn-secondary-link"
-        style={{ cursor: "pointer", border: "1px solid var(--line)" }}
-        onClick={() => router.refresh()}
-      >
+      <Button variant="secondary" onClick={() => router.refresh()}>
         Refresh now
-      </button>
+      </Button>
       {hasInProgress && (
         <span className="banner banner-loading" style={{ margin: 0 }}>
           AI drafting… auto-refresh ({seconds}s)

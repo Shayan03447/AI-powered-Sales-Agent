@@ -1,0 +1,47 @@
+/* ─── Base ─────────────────────────────────────────────────────────────── */
+.card {
+  margin-top: 18px;
+  padding: 22px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── Variants ─────────────────────────────────────────────────────────── */
+
+/*
+ * action — workflow and form cards; constrained width so they don't
+ * stretch across the full content column on wide viewports.
+ */
+.action {
+  max-width: 560px;
+}
+
+/*
+ * data — table and list containers; no horizontal padding so table
+ * cells sit flush against the card edge (Stripe/Linear pattern).
+ * Vertical padding preserved so the top/bottom border has breathing room.
+ */
+.data {
+  padding: 0;
+  overflow-x: auto;
+}
+
+/*
+ * error — alert-style card for DB / network failures. Inherits card
+ * shape (radius, shadow, border-radius) but applies danger surface.
+ */
+.error {
+  background: var(--bad-bg);
+  border-color: #f0c2c2;
+  color: var(--bad);
+}
+
+/*
+ * empty — used when a list or table has no data yet.
+ * Same surface as default; content is styled by the caller.
+ */
+.empty {
+  color: var(--muted);
+}

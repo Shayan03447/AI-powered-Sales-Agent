@@ -1,6 +1,7 @@
 import { query } from "@/lib/db";
 import DraftsTable, { type DraftLead } from "@/components/drafts/DraftsTable";
 import DraftsRefresh from "@/components/drafts/DraftsRefresh";
+import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -63,10 +64,10 @@ export default async function DraftsPage() {
       </div>
 
       {!result.ok && (
-        <div className="card error-box">
+        <Card variant="error">
           <strong>Could not load drafts</strong>
           <p>{result.error}</p>
-        </div>
+        </Card>
       )}
 
       {result.ok && <DraftsTable drafts={result.drafts} />}

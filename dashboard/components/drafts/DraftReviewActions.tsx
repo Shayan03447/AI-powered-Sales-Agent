@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Button from "@/components/ui/Button";
 
 type Props = {
   leadId: number;
@@ -123,18 +124,17 @@ export default function DraftReviewActions({
       )}
 
       <div className="draft-action-row">
-        <button
-          type="button"
+        <Button
           onClick={onApprove}
           disabled={busy || (!initialSubject && !editing)}
+          loading={loading === "approve"}
         >
           {loading === "approve" ? "Approving…" : "Approve"}
-        </button>
+        </Button>
 
         {!editing ? (
-          <button
-            type="button"
-            className="btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => {
               setEditing(true);
               setShowReject(false);
@@ -144,20 +144,19 @@ export default function DraftReviewActions({
             disabled={busy}
           >
             Edit
-          </button>
+          </Button>
         ) : (
           <>
-            <button
-              type="button"
-              className="btn-secondary"
+            <Button
+              variant="secondary"
               onClick={onSaveEdit}
               disabled={busy}
+              loading={loading === "edit"}
             >
               {loading === "edit" ? "Saving…" : "Save edit"}
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => {
                 setEditing(false);
                 setSubject(initialSubject);
@@ -166,14 +165,13 @@ export default function DraftReviewActions({
               disabled={busy}
             >
               Cancel
-            </button>
+            </Button>
           </>
         )}
 
         {!showReject ? (
-          <button
-            type="button"
-            className="btn-danger"
+          <Button
+            variant="danger"
             onClick={() => {
               setShowReject(true);
               setEditing(false);
@@ -183,25 +181,24 @@ export default function DraftReviewActions({
             disabled={busy}
           >
             Reject
-          </button>
+          </Button>
         ) : (
           <>
-            <button
-              type="button"
-              className="btn-danger"
+            <Button
+              variant="danger"
               onClick={onReject}
               disabled={busy}
+              loading={loading === "reject"}
             >
               {loading === "reject" ? "Rejecting…" : "Confirm reject"}
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => setShowReject(false)}
               disabled={busy}
             >
               Cancel
-            </button>
+            </Button>
           </>
         )}
       </div>

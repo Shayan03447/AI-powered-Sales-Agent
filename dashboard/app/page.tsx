@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getPipelineCounts } from "@/lib/pipeline/counts";
+import StatusBadge from "@/components/ui/StatusBadge";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -39,18 +40,18 @@ export default async function HomePage() {
           </p>
           <ul className="pipeline-list">
             <li>
-              <strong>new</strong> (Research): {c.newReady}
+              <StatusBadge status="new" /> (Research): {c.newReady}
               {researchOpen ? " — open" : " — locked"}
             </li>
             <li>
-              <strong>enriched</strong> (AI Draft): {c.enrichedReady}
+              <StatusBadge status="enriched" /> (AI Draft): {c.enrichedReady}
               {aiDraftOpen ? " — open" : " — locked"}
             </li>
             <li>
-              <strong>pending_review</strong> (Drafts): {c.pendingReview}
+              <StatusBadge status="pending_review" /> (Drafts): {c.pendingReview}
             </li>
             <li>
-              <strong>approved</strong> (Send): {c.approved}
+              <StatusBadge status="approved" /> (Send): {c.approved}
               {sendOpen ? " — Send open" : " — Send locked"}
             </li>
           </ul>

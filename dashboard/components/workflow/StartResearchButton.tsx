@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StepLockNotice from "@/components/workflow/StepLockNotice";
+import Button from "@/components/ui/Button";
 
 export default function StartResearchButton({
   waitingCount,
@@ -78,13 +79,13 @@ export default function StartResearchButton({
         </div>
       )}
 
-      <button
-        type="button"
+      <Button
         onClick={onStart}
-        disabled={loading || locked}
+        disabled={locked}
+        loading={loading}
       >
         {loading ? "Starting…" : locked ? "Locked — need new leads" : "Start Research"}
-      </button>
+      </Button>
 
       <Link href="/leads" className="btn-link">
         View leads →

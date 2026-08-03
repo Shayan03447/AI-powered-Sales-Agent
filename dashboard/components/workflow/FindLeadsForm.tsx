@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Button from "@/components/ui/Button";
 
 /** Find Leads form only — no tables on this page */
 export default function FindLeadsForm() {
@@ -139,9 +140,9 @@ export default function FindLeadsForm() {
         />
       </label>
 
-      <button type="submit" disabled={loading}>
+      <Button type="submit" loading={loading}>
         {loading ? "Starting search…" : "Start Find Leads"}
-      </button>
+      </Button>
 
       <Link href="/campaigns" className="btn-link">
         View campaigns →

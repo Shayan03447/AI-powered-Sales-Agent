@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import StartSendButton from "@/components/workflow/StartSendButton";
 import StatusBadge from "@/components/ui/StatusBadge";
 import SendRefresh from "@/components/workflow/SendRefresh";
+import Card from "@/components/ui/Card";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -89,10 +90,10 @@ export default async function SendPage() {
       </div>
 
       {!ready.ok && (
-        <div className="card error-box">
+        <Card variant="error">
           <strong>Could not read send queue</strong>
           <p>{ready.error}</p>
-        </div>
+        </Card>
       )}
 
       <StartSendButton waitingCount={ready.count} />

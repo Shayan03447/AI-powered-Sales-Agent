@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import StartResearchButton from "@/components/workflow/StartResearchButton";
+import Card from "@/components/ui/Card";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +32,10 @@ export default async function ResearchPage() {
       </p>
 
       {!result.ok && (
-        <div className="card error-box">
+        <Card variant="error">
           <strong>Could not read queue</strong>
           <p>{result.error}</p>
-        </div>
+        </Card>
       )}
 
       <StartResearchButton waitingCount={result.count} />

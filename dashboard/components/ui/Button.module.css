@@ -1,0 +1,100 @@
+/* ─── Base ─────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+  white-space: nowrap;
+  text-decoration: none;
+  margin: 0;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* ─── Variants ─────────────────────────────────────────────────────────── */
+.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+
+.secondary {
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: #b7c7d6;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--accent-deep);
+  border-color: transparent;
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--ink);
+}
+
+.danger {
+  background: var(--bg-elevated);
+  color: var(--bad);
+  border-color: #f0c2c2;
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--bad-bg);
+  border-color: #f0c2c2;
+}
+
+/* ─── Loading modifier ─────────────────────────────────────────────────── */
+.loading {
+  cursor: wait;
+  opacity: 0.8;
+}
+
+/* ─── Spinner ──────────────────────────────────────────────────────────── */
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.55s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

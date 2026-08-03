@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Button from "@/components/ui/Button";
 
 /** Auto-refresh while any lead is still enriching */
 export default function LeadsRefresh({
@@ -26,14 +27,9 @@ export default function LeadsRefresh({
 
   return (
     <div className="page-head-actions">
-      <button
-        type="button"
-        className="btn-secondary-link"
-        style={{ cursor: "pointer", border: "1px solid var(--line)" }}
-        onClick={() => router.refresh()}
-      >
+      <Button variant="secondary" onClick={() => router.refresh()}>
         Refresh now
-      </button>
+      </Button>
       {hasInProgress && (
         <span className="banner banner-loading" style={{ margin: 0 }}>
           Research in progress… auto-refresh every 8s ({seconds}s)

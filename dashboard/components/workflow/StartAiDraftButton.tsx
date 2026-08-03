@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StepLockNotice from "@/components/workflow/StepLockNotice";
+import Button from "@/components/ui/Button";
 
 export default function StartAiDraftButton({
   waitingCount,
@@ -77,17 +78,17 @@ export default function StartAiDraftButton({
         </div>
       )}
 
-      <button
-        type="button"
+      <Button
         onClick={onStart}
-        disabled={loading || locked}
+        disabled={locked}
+        loading={loading}
       >
         {loading
           ? "Starting…"
           : locked
             ? "Locked — need enriched leads"
             : "Create AI Emails"}
-      </button>
+      </Button>
 
       <Link href="/drafts" className="btn-link">
         View drafts →

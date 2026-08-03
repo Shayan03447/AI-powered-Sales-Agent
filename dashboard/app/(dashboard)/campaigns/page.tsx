@@ -1,6 +1,7 @@
 import { query } from "@/lib/db";
 import type { Campaign } from "@/types";
 import CampaignsTable from "@/components/campaigns/CampaignsTable";
+import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -42,10 +43,10 @@ export default async function CampaignsPage() {
       </div>
 
       {!result.ok && (
-        <div className="card error-box">
+        <Card variant="error">
           <strong>Could not load campaigns</strong>
           <p>{result.error}</p>
-        </div>
+        </Card>
       )}
 
       {result.ok && <CampaignsTable campaigns={result.campaigns} />}

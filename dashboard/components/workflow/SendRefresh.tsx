@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import Button from "@/components/ui/Button";
 
 /** Auto-refresh while any lead is status=sending */
 export default function SendRefresh({
@@ -18,12 +19,8 @@ export default function SendRefresh({
   }, [hasInProgress, router]);
 
   return (
-    <button
-      type="button"
-      className="btn-secondary"
-      onClick={() => router.refresh()}
-    >
+    <Button variant="secondary" onClick={() => router.refresh()}>
       Refresh
-    </button>
+    </Button>
   );
 }

@@ -2,6 +2,7 @@ import { query } from "@/lib/db";
 import type { Lead } from "@/types";
 import LeadsTable from "@/components/leads/LeadsTable";
 import LeadsRefresh from "@/components/leads/LeadsRefresh";
+import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -81,10 +82,10 @@ export default async function LeadsPage({
       </div>
 
       {!result.ok && (
-        <div className="card error-box">
+        <Card variant="error">
           <strong>Could not load leads</strong>
           <p>{result.error}</p>
-        </div>
+        </Card>
       )}
 
       {result.ok && <LeadsTable leads={result.leads} />}
