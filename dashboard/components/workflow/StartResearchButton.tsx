@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StepLockNotice from "@/components/workflow/StepLockNotice";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import WorkflowProgress from "@/components/ui/WorkflowProgress";
 
 export default function StartResearchButton({
   waitingCount,
@@ -36,23 +38,24 @@ export default function StartResearchButton({
           ? `\n${String(data.detail).slice(0, 300)}`
           : "";
         setError((data.error || "Could not start research") + detail);
+        setLoading(false);
         return;
       }
 
       setMessage(data.message);
+      // Keep button disabled until redirect completes to prevent double-submit.
       setTimeout(() => {
         router.push("/leads");
         router.refresh();
       }, 1500);
     } catch {
       setError("Network error — is the dashboard server running?");
-    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className={`card form-card ${locked ? "card-locked" : ""}`}>
+    <Card variant="action" className={locked ? "card-locked" : ""}>
       <h2>Start Research</h2>
       <p className="muted">
         Runs only for leads with status <strong>new</strong> (and a website).
@@ -61,22 +64,27 @@ export default function StartResearchButton({
       </p>
 
       <p className="stat-line">
-        Ready to research (<code>new</code>):{" "}
-        <strong>{waitingCount}</strong> lead(s)
+        <strong>{waitingCount}</strong> lead{waitingCount !== 1 ? "s" : ""} ready for research
       </p>
 
       <StepLockNotice
         locked={locked}
         title="Research locked"
-        reason="No leads with status new. Find Leads first, or if leads are already enriched, go to AI Draft."
+        reason="No new leads ready. Find Leads first, or go to AI Draft if your leads are already enriched."
         href="/find-leads"
         linkLabel="Go to Find Leads →"
       />
 
       {loading && (
-        <div className="banner banner-loading">
-          Research starting… please wait.
-        </div>
+        <WorkflowProgress
+          title="Research running…"
+          activeIndex={0}
+          steps={[
+            { label: "Triggering research workflow" },
+            { label: "Scraping websites & scoring leads" },
+            { label: "Saving enriched data to Leads" },
+          ]}
+        />
       )}
 
       <Button
@@ -103,6 +111,6 @@ export default function StartResearchButton({
 
       {message && <p className="ok">{message}</p>}
       {error && <p className="error-box">{error}</p>}
-    </div>
+    </Card>
   );
 }

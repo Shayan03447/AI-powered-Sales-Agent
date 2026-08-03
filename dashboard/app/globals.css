@@ -1,7 +1,7 @@
 :root {
   --ink: #12263a;
   --ink-soft: #3d5266;
-  --muted: #6b7c8c;
+  --muted: #52636f; /* darkened: was #6b7c8c, now ~5.8:1 contrast on white */
   --line: #d7e0e8;
   --paper: #ffffff;
   --bg0: #eef3f7;
@@ -29,10 +29,40 @@
   --bg-canvas: #f4f7fa;
   --bg-subtle: #eef2f6;
   --bg-elevated: #ffffff;
+
+  /* Spacing scale — use these tokens for margin/padding instead of raw px */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ─── Accessible focus ring ─────────────────────────────────────────────── */
+/*
+ * Shown only for keyboard navigation (:focus-visible), suppressed for
+ * mouse/touch so sighted pointer users are not distracted.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/*
+ * Form elements have a box-shadow focus indicator already —
+ * suppress the global outline to avoid a double ring.
+ */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
 }
 
 body {
@@ -120,6 +150,13 @@ body {
   font-weight: 600;
 }
 
+/* Keyboard focus for nav links — tighter offset to respect pill shape */
+.nav-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--radius-pill);
+}
+
 main {
   max-width: 1080px;
   margin: 0 auto;
@@ -205,6 +242,57 @@ a {
   flex-wrap: wrap;
 }
 
+/* ─── Hero workspace overview ───────────────────────────────────────────── */
+
+/* Dynamic state sentence below h1 */
+.hero-context {
+  margin: 4px 0 18px;
+  font-size: 1rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+/* Stage count strip */
+.hero-stats {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  margin: 0 0 0;
+  padding: 18px 0 20px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Big count number */
+.hero-stat-count {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dimmed when count is zero */
+.hero-stat-zero {
+  color: var(--muted);
+}
+
+/* "RESEARCH", "REVIEW" etc. */
+.hero-stat-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+
 .action-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -234,6 +322,12 @@ a {
 .action-tile:hover {
   border-color: #a8bfd0;
   box-shadow: var(--shadow-elevated);
+}
+
+.action-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: rgba(15, 110, 106, 0.4);
 }
 
 .tile-step {
@@ -347,15 +441,16 @@ button {
   font-weight: 650;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
 
 button:hover:not(:disabled) {
   background: var(--accent-deep);
 }
 
+/* Subtle press feedback — no vertical lift to avoid distracting motion */
 button:active:not(:disabled) {
-  transform: translateY(1px);
+  opacity: 0.88;
 }
 
 button:disabled {
@@ -386,6 +481,13 @@ button:disabled {
   color: #fff;
 }
 
+/* White inner ring on dark primary background for visible contrast */
+.btn-primary-link:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px var(--accent);
+}
+
 .btn-secondary-link {
   background: #fff;
   color: var(--ink);
@@ -394,6 +496,11 @@ button:disabled {
 
 .btn-secondary-link:hover {
   border-color: #b7c7d6;
+}
+
+.btn-secondary-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .btn-link {
@@ -630,6 +737,11 @@ button.btn-danger:hover:not(:disabled) {
   border-color: #b7c7d6;
 }
 
+.nav-logout:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 
 .drafts-list {
   display: flex;
@@ -707,13 +819,40 @@ tbody tr:hover {
   background: #f7fafc;
 }
 
-@media (max-width: 840px) {
+/* ─── Responsive grid ───────────────────────────────────────────────────── */
+
+/*
+ * action-grid base = 3 col, action-grid-4 = 4 col, action-grid-5 = 5 col.
+ * Breakpoints cascade down so all variants converge to 1 col on small screens.
+ */
+
+/* 768 – 1280px: cap at 3 columns */
+@media (max-width: 1280px) {
+  .action-grid-4,
+  .action-grid-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 480 – 768px: 2 columns */
+@media (max-width: 768px) {
+  .action-grid,
+  .action-grid-4,
+  .action-grid-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* < 480px: single column */
+@media (max-width: 480px) {
   .action-grid,
   .action-grid-4,
   .action-grid-5 {
     grid-template-columns: 1fr;
   }
 }
+
+/* ─── Mobile layout ─────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
   main {
@@ -725,6 +864,80 @@ tbody tr:hover {
   }
 
   .hero-panel {
-    padding: 22px;
+    padding: 20px;
+  }
+
+  /* Stack page header on mobile so actions wrap cleanly below the title */
+  .page-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Tighter tile padding on small screens */
+  .action-tile {
+    padding: 16px;
+  }
+
+  /* Tables: denser cells + smooth horizontal swipe on mobile */
+  th,
+  td {
+    padding: 10px 8px;
+    font-size: 0.88rem;
+  }
+
+  .table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ─── Responsive table column hiding ───────────────────────────────────── */
+/*
+ * On small screens, hide secondary columns to reduce horizontal scroll.
+ * Leads: hide ID (1), Speed (6), SEO (7), Campaign (8)
+ * Campaigns: hide ID (1), Found (5), Inserted (6)
+ */
+
+@media (max-width: 640px) {
+  /* Leads table — keep: Business, City, Status, Email, Website */
+  .leads-table th:nth-child(1),
+  .leads-table td:nth-child(1),
+  .leads-table th:nth-child(6),
+  .leads-table td:nth-child(6),
+  .leads-table th:nth-child(7),
+  .leads-table td:nth-child(7),
+  .leads-table th:nth-child(8),
+  .leads-table td:nth-child(8) {
+    display: none;
+  }
+
+  /* Campaigns table — keep: Business type, City, Status, Leads */
+  .campaigns-table th:nth-child(1),
+  .campaigns-table td:nth-child(1),
+  .campaigns-table th:nth-child(5),
+  .campaigns-table td:nth-child(5),
+  .campaigns-table th:nth-child(6),
+  .campaigns-table td:nth-child(6) {
+    display: none;
+  }
+
+  /* Send table — keep: Business, Status, Sent At (hide Email, Note) */
+  .send-table th:nth-child(2),
+  .send-table td:nth-child(2),
+  .send-table th:nth-child(5),
+  .send-table td:nth-child(5) {
+    display: none;
+  }
+}
+
+/* ─── Reduce motion — respect OS accessibility preference ───────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

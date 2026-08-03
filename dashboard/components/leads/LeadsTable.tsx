@@ -1,21 +1,26 @@
 import type { Lead } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
-import Card from "@/components/ui/Card";
 import Link from "next/link";
+import EmptyState, { LeadsIcon } from "@/components/ui/EmptyState";
 
 export default function LeadsTable({ leads }: { leads: Lead[] }) {
   if (leads.length === 0) {
     return (
-      <Card variant="empty">
-        <p className="muted">
-          No leads yet. Start from <Link href="/find-leads">Find Leads</Link>.
-        </p>
-      </Card>
+      <EmptyState
+        icon={<LeadsIcon />}
+        title="No leads yet"
+        description="Start finding businesses to build your pipeline."
+        action={
+          <Link href="/find-leads" className="btn-primary-link">
+            Find Leads
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="card table-wrap">
+    <div className="card table-wrap leads-table">
       <table>
         <thead>
           <tr>
@@ -62,7 +67,12 @@ export default function LeadsTable({ leads }: { leads: Lead[] }) {
               <td>{lead.campaign_id ? `#${lead.campaign_id}` : "—"}</td>
               <td>
                 {lead.website_url ? (
-                  <a href={lead.website_url} target="_blank" rel="noreferrer">
+                  <a
+                    href={lead.website_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Visit ${lead.business_name} website`}
+                  >
                     open
                   </a>
                 ) : (

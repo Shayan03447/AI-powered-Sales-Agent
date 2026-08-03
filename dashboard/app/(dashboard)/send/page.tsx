@@ -4,9 +4,28 @@ import StartSendButton from "@/components/workflow/StartSendButton";
 import StatusBadge from "@/components/ui/StatusBadge";
 import SendRefresh from "@/components/workflow/SendRefresh";
 import Card from "@/components/ui/Card";
+import EmptyState, { SendIcon } from "@/components/ui/EmptyState";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+export const metadata = { title: "Send — Atrium Reach" };
+
+/** Format a raw PostgreSQL timestamp into a user-friendly short date. */
+function formatSentAt(raw: string | null): string {
+  if (!raw) return "Sent";
+  try {
+    return new Date(raw).toLocaleString("en-AU", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "Sent";
+  }
+}
 
 type RecentLead = {
   id: number;
@@ -77,12 +96,12 @@ export default async function SendPage() {
           <p className="eyebrow">Step 5</p>
           <h1>Send</h1>
           <p className="muted">
-            Send approved emails via Resend (n8n WF4). Domain + API key required
-            in n8n before real delivery.
+            Send approved emails via your configured email domain. Make sure
+            your email API is set up before sending.
           </p>
         </div>
         <div className="page-head-actions">
-          {recent.ok && <SendRefresh hasInProgress={!!hasInProgress} />}
+          <SendRefresh hasInProgress={!!hasInProgress} />
           <Link href="/drafts" className="btn-secondary-link">
             Drafts
           </Link>
@@ -96,28 +115,46 @@ export default async function SendPage() {
         </Card>
       )}
 
-      <StartSendButton waitingCount={ready.count} />
+      {/* Only render the send action card when DB query succeeded */}
+      {ready.ok && <StartSendButton waitingCount={ready.count} />}
 
-      <section className="card" style={{ marginTop: 18 }}>
+      {/* Show a positive confirmation when all approved emails have been sent */}
+      {ready.ok && ready.count === 0 && recent.ok && recent.rows.some((r) => r.status === "sent") && (
+        <div className="banner banner-ok" style={{ marginBottom: 0 }}>
+          All approved emails have been sent. Start a new campaign to find more leads.
+        </div>
+      )}
+
+      <Card as="section" style={{ marginTop: "var(--space-3)" }}>
         <h2 style={{ marginTop: 0 }}>Recent send status</h2>
         <p className="muted">
-          Approved / sending / sent / failed — refresh after you click Send.
+          Approved · Sending · Sent · Failed — refresh after running Send.
         </p>
 
         {!recent.ok && <p className="error-box">{recent.error}</p>}
 
         {recent.ok && recent.rows.length === 0 && (
-          <p className="muted">No send-related leads yet.</p>
+          <EmptyState
+            icon={<SendIcon />}
+            title="No sends yet"
+            description="Approved leads will appear here once you run the send step."
+            action={
+              <Link href="/drafts" className="btn-secondary-link">
+                Review Drafts
+              </Link>
+            }
+          />
         )}
 
         {recent.ok && recent.rows.length > 0 && (
-          <div className="table-wrap">
+          <div className="table-wrap send-table">
             <table>
               <thead>
                 <tr>
                   <th>Business</th>
                   <th>Email</th>
                   <th>Status</th>
+                  <th>Sent At</th>
                   <th>Note</th>
                 </tr>
               </thead>
@@ -130,11 +167,12 @@ export default async function SendPage() {
                       <StatusBadge status={r.status} />
                     </td>
                     <td className="muted">
-                      {r.status === "sent"
-                        ? r.sent_at
-                          ? `Sent ${r.sent_at}`
-                          : "Sent"
-                        : r.failure_reason || "—"}
+                      {r.status === "sent" ? formatSentAt(r.sent_at) : "—"}
+                    </td>
+                    <td className="muted">
+                      {r.status === "send_failed"
+                        ? (r.failure_reason?.slice(0, 120) || "Send failed")
+                        : "—"}
                     </td>
                   </tr>
                 ))}
@@ -142,7 +180,7 @@ export default async function SendPage() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </main>
   );
 }

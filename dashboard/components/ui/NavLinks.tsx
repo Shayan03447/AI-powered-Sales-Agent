@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import LogoutButton from "@/components/auth/LogoutButton";
@@ -33,9 +33,17 @@ interface Props {
   counts: PipelineCounts;
 }
 
+/** All focusable element selectors for focus-trap logic. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
 export default function NavLinks({ counts }: Props) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
 
   // Close drawer whenever the active route changes (after navigation).
   useEffect(() => {
@@ -53,6 +61,54 @@ export default function NavLinks({ counts }: Props) {
       document.body.style.overflow = "";
     };
   }, [drawerOpen]);
+
+  // Move focus into the drawer when it opens; restore to hamburger when it closes.
+  useEffect(() => {
+    if (drawerOpen) {
+      // Small delay lets CSS transition start before focus moves.
+      const id = setTimeout(() => closeBtnRef.current?.focus(), 50);
+      return () => clearTimeout(id);
+    } else {
+      hamburgerRef.current?.focus();
+    }
+  }, [drawerOpen]);
+
+  /**
+   * Focus trap — keeps Tab / Shift+Tab cycling inside the open drawer.
+   * Escape closes the drawer.
+   */
+  const handleDrawerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Escape") {
+        setDrawerOpen(false);
+        return;
+      }
+
+      if (e.key !== "Tab" || !drawerRef.current) return;
+
+      const focusable = Array.from(
+        drawerRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)
+      ).filter((el) => !el.closest("[aria-hidden='true']"));
+
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    },
+    []
+  );
 
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const toggleDrawer = useCallback(() => setDrawerOpen((o) => !o), []);
@@ -117,6 +173,7 @@ export default function NavLinks({ counts }: Props) {
 
       {/* ── Hamburger button (visible below 768 px) ──────────────────────── */}
       <button
+        ref={hamburgerRef}
         type="button"
         className={`${styles.hamburger}${drawerOpen ? ` ${styles.hamburgerOpen}` : ""}`}
         onClick={toggleDrawer}
@@ -142,16 +199,19 @@ export default function NavLinks({ counts }: Props) {
 
       {/* ── Mobile drawer ────────────────────────────────────────────────── */}
       <div
+        ref={drawerRef}
         id="mobile-nav-drawer"
         role="dialog"
         aria-modal="true"
         aria-label="Navigation menu"
         className={`${styles.drawer}${drawerOpen ? ` ${styles.drawerOpen}` : ""}`}
+        onKeyDown={handleDrawerKeyDown}
       >
         {/* Drawer header */}
         <div className={styles.drawerHeader}>
           <span className={styles.drawerBrand}>Atrium Reach</span>
           <button
+            ref={closeBtnRef}
             type="button"
             className={styles.drawerClose}
             onClick={closeDrawer}

@@ -8,6 +8,8 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+export const metadata = { title: "Leads — Atrium Reach" };
+
 async function getLeads(campaignId: number | null) {
   try {
     if (campaignId) {
@@ -62,11 +64,11 @@ export default async function LeadsPage({
           <p className="muted">
             {campaignId
               ? `Showing leads for campaign #${campaignId}`
-              : "All leads from database — table only"}
+              : "All leads across every campaign — showing last 100."}
           </p>
         </div>
         <div className="page-head-actions">
-          {result.ok && <LeadsRefresh hasInProgress={!!hasInProgress} />}
+          <LeadsRefresh hasInProgress={!!hasInProgress} />
           {campaignId && (
             <Link href="/leads" className="btn-secondary-link">
               Show all

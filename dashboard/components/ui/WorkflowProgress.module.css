@@ -1,0 +1,83 @@
+/*
+ * WorkflowProgress — step-by-step progress indicator for long-running
+ * workflow operations (Research, AI Draft, Send).
+ * Replaces the raw banner-loading div in workflow start buttons.
+ */
+
+/* ─── Wrapper ───────────────────────────────────────────────────────────── */
+.wrapper {
+  margin: 14px 0;
+  padding: 14px 16px 16px;
+  background: var(--warn-bg);
+  border: 1px solid #efd89a;
+  border-radius: var(--radius-lg);
+}
+
+/* ─── Header row: spinner + title ───────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--warn);
+  margin: 0;
+}
+
+/* ─── Step list ─────────────────────────────────────────────────────────── */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* ─── Single step ───────────────────────────────────────────────────────── */
+.step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.stepIcon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── State variants ────────────────────────────────────────────────────── */
+.completed {
+  color: var(--ok);
+}
+
+.completed .stepIcon {
+  color: var(--ok);
+}
+
+.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.active .stepIcon {
+  color: var(--warn);
+}
+
+.pending {
+  color: var(--muted);
+}
+
+.pending .stepIcon {
+  color: var(--line);
+}

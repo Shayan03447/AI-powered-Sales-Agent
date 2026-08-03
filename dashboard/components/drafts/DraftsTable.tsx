@@ -1,8 +1,9 @@
 import type { Lead } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
 import DraftReviewActions from "@/components/drafts/DraftReviewActions";
-import Card from "@/components/ui/Card";
+import Spinner from "@/components/ui/Spinner";
 import Link from "next/link";
+import EmptyState, { DraftIcon } from "@/components/ui/EmptyState";
 
 export type DraftLead = Lead & {
   email_subject?: string | null;
@@ -13,12 +14,16 @@ export type DraftLead = Lead & {
 export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
   if (drafts.length === 0) {
     return (
-      <Card variant="empty">
-        <p className="muted">
-          No drafts yet. Go to <Link href="/ai-draft">AI Draft</Link> to create
-          emails.
-        </p>
-      </Card>
+      <EmptyState
+        icon={<DraftIcon />}
+        title="No drafts waiting"
+        description="AI generated emails will appear here once you run the AI Draft step."
+        action={
+          <Link href="/ai-draft" className="btn-primary-link">
+            Start AI Draft
+          </Link>
+        }
+      />
     );
   }
 
@@ -38,7 +43,10 @@ export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
           </div>
 
           {d.status === "auditing" && (
-            <div className="banner banner-loading">AI writing draft…</div>
+            <div className="banner banner-loading" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Spinner size="sm" label="AI is writing this draft" />
+              AI writing draft… this may take a minute.
+            </div>
           )}
 
           {d.status === "approved" && (
@@ -51,6 +59,20 @@ export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
             <div className="banner banner-bad">
               Rejected — will not be sent
               {d.failure_reason ? `: ${d.failure_reason}` : "."}
+            </div>
+          )}
+
+          {d.status === "audit_failed" && (
+            <div className="banner banner-bad">
+              <strong>Draft generation failed.</strong>{" "}
+              {d.failure_reason
+                ? d.failure_reason.slice(0, 200)
+                : "The AI step encountered an error."}{" "}
+              Go to{" "}
+              <Link href="/ai-draft" className="btn-link" style={{ display: "inline", padding: 0 }}>
+                AI Draft
+              </Link>{" "}
+              and run it again to retry.
             </div>
           )}
 
@@ -70,12 +92,19 @@ export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
           {d.personalized_email && (
             <div className="draft-block">
               <h3>Email draft</h3>
-              <pre className="draft-text">{d.personalized_email}</pre>
+              <div className="draft-text">{d.personalized_email}</div>
             </div>
           )}
 
           {!d.email_subject && d.status === "pending_review" && (
-            <p className="muted">Draft fields empty — check WF3 save step.</p>
+            <p className="muted">
+              Email draft is empty — the AI generation step may not have saved
+              correctly. Try running{" "}
+              <Link href="/ai-draft" className="btn-link" style={{ display: "inline", padding: 0 }}>
+                AI Draft
+              </Link>{" "}
+              again for this lead.
+            </p>
           )}
 
           {d.status === "pending_review" && (

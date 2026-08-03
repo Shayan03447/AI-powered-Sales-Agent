@@ -7,6 +7,8 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+export const metadata = { title: "Drafts — Atrium Reach" };
+
 async function getDrafts() {
   try {
     const rows = await query<DraftLead>(
@@ -49,14 +51,14 @@ export default async function DraftsPage() {
     <main className="fade-in">
       <div className="page-head">
         <div>
-          <p className="eyebrow">Data</p>
+          <p className="eyebrow">Step 4</p>
           <h1>Drafts</h1>
           <p className="muted">
             Review AI emails — Approve, Edit, or Reject before send
           </p>
         </div>
         <div className="page-head-actions">
-          {result.ok && <DraftsRefresh hasInProgress={!!hasInProgress} />}
+          <DraftsRefresh hasInProgress={!!hasInProgress} />
           <Link href="/ai-draft" className="btn-primary-link">
             + Create AI Emails
           </Link>

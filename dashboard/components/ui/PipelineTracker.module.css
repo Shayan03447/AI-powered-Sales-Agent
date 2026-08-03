@@ -1,0 +1,313 @@
+/*
+ * PipelineTracker — 5-step visual pipeline status.
+ *
+ * Desktop: horizontal step row with connecting lines.
+ * Mobile (<768px): vertical step column with connecting lines.
+ *
+ * Each step has a left-connector half and right-connector half as explicit
+ * DOM elements so orientation changes are a single flex-direction swap.
+ */
+
+/* ─── Wrapper card ──────────────────────────────────────────────────────── */
+.tracker {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 24px 20px 20px;
+  margin-bottom: 22px;
+}
+
+.trackerTitle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
+/* ─── Step list ─────────────────────────────────────────────────────────── */
+.steps {
+  display: flex;
+  align-items: flex-start;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ─── Individual step ───────────────────────────────────────────────────── */
+.step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0; /* allow text truncation */
+}
+
+/* ─── Marker row: [connector-left] [node] [connector-right] ─────────────── */
+.marker {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* ─── Node dot ──────────────────────────────────────────────────────────── */
+.node {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  transition: box-shadow 0.2s ease;
+
+  /* Default = locked */
+  background: var(--bg-subtle);
+  border: 2px solid var(--line);
+  color: var(--muted);
+}
+
+/* ─── Connector halves ──────────────────────────────────────────────────── */
+.connLeft,
+.connRight {
+  flex: 1;
+  height: 2px;
+  min-width: 4px;
+}
+
+/* Default connector colour */
+.connLeft  { background: var(--line); }
+.connRight { background: var(--line); }
+
+/* First step has no left connector; last step has no right connector */
+.step:first-child .connLeft,
+.step:last-child  .connRight {
+  background: transparent;
+}
+
+/* ─── Step body: label + info ───────────────────────────────────────────── */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin-top: 8px;
+  text-decoration: none;
+  color: inherit;
+  padding: 0 4px;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.body:hover {
+  background: var(--bg-subtle);
+}
+
+.stepLabel {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.stepInfo {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ─── State: locked ─────────────────────────────────────────────────────── */
+/* Default styles above cover the locked state */
+
+/* ─── State: completed ──────────────────────────────────────────────────── */
+.completed .node {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.completed .connRight {
+  background: var(--accent);
+}
+
+.completed .stepLabel {
+  color: var(--ink-soft);
+}
+
+/* ─── State: active ─────────────────────────────────────────────────────── */
+.active .node {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 5px rgba(15, 110, 106, 0.16);
+}
+
+/* Left connector entering an active step was from a completed step → teal */
+.active .connLeft {
+  background: var(--accent);
+}
+
+.active .stepLabel {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.active .stepInfo {
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+
+/* ─── Count chip shown on active steps ──────────────────────────────────── */
+.countChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(15, 110, 106, 0.1);
+  color: var(--accent-deep);
+  border: 1px solid rgba(15, 110, 106, 0.22);
+  margin-top: 2px;
+}
+
+/* ─── Locked connector: dashed ──────────────────────────────────────────── */
+/*
+ * If the LEFT connector of a locked step should be dashed (i.e. the previous
+ * step was also locked), we detect that via .locked .connLeft.
+ * If the previous step was completed/active, its .connRight was solid teal,
+ * but the locked step's .connLeft overrides to dashed.
+ */
+.locked .connLeft {
+  background: transparent;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--line) 0,
+    var(--line) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+.locked .connRight {
+  background: transparent;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--line) 0,
+    var(--line) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+}
+
+/* ─── Mobile — vertical layout ───────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .tracker {
+    padding: 20px 16px 16px;
+  }
+
+  .steps {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .step {
+    flex-direction: row;
+    align-items: stretch;
+    flex: none;
+    min-width: 0;
+  }
+
+  /* Marker column: [conn-top] [node] [conn-bottom] — all vertical */
+  .marker {
+    flex-direction: column;
+    align-items: center;
+    width: 24px;
+    flex-shrink: 0;
+    margin-right: 14px;
+  }
+
+  /* Connectors become vertical */
+  .connLeft,
+  .connRight {
+    width: 2px;
+    height: auto;
+    flex: 1;
+    min-height: 12px;
+  }
+
+  /* First step has no top connector; last step has no bottom connector */
+  .step:first-child .connLeft  { background: transparent !important; background-image: none !important; }
+  .step:last-child  .connRight { background: transparent !important; background-image: none !important; }
+
+  /* Dashed vertical for locked */
+  .locked .connLeft {
+    background: transparent;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      var(--line) 0,
+      var(--line) 4px,
+      transparent 4px,
+      transparent 8px
+    ) !important;
+  }
+
+  .locked .connRight {
+    background: transparent;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      var(--line) 0,
+      var(--line) 4px,
+      transparent 4px,
+      transparent 8px
+    ) !important;
+  }
+
+  /* Vertical teal connectors for completed */
+  .completed .connRight {
+    background: var(--accent);
+    background-image: none;
+  }
+
+  .active .connLeft {
+    background: var(--accent);
+    background-image: none;
+  }
+
+  /* Step body: left-aligned, fills remaining space */
+  .body {
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    margin-top: 0;
+    padding: 10px 8px;
+    min-height: 48px;
+    gap: 8px;
+  }
+
+  .stepLabel {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+
+  .stepInfo {
+    white-space: normal;
+  }
+}

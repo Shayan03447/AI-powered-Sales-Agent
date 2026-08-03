@@ -1,0 +1,51 @@
+/*
+ * EmptyState — centered placeholder used when a list or table has no data.
+ * Builds on Card variant="empty" for surface; adds layout and typography.
+ */
+
+/* ─── Centered content column ───────────────────────────────────────────── */
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 24px 40px;
+  gap: 0;
+}
+
+/* ─── Icon container ────────────────────────────────────────────────────── */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(15, 110, 106, 0.09);
+  color: var(--accent);
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+/* ─── Title ─────────────────────────────────────────────────────────────── */
+.title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 6px;
+  line-height: 1.3;
+}
+
+/* ─── Description ───────────────────────────────────────────────────────── */
+.description {
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 320px;
+}
+
+/* ─── Action CTA ────────────────────────────────────────────────────────── */
+.action {
+  margin-top: 20px;
+}

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StepLockNotice from "@/components/workflow/StepLockNotice";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import WorkflowProgress from "@/components/ui/WorkflowProgress";
 
 export default function StartAiDraftButton({
   waitingCount,
@@ -36,23 +38,24 @@ export default function StartAiDraftButton({
           ? `\n${String(data.detail).slice(0, 300)}`
           : "";
         setError((data.error || "Could not start AI draft") + detail);
+        setLoading(false);
         return;
       }
 
       setMessage(data.message);
+      // Keep button disabled until redirect completes to prevent double-submit.
       setTimeout(() => {
         router.push("/drafts");
         router.refresh();
       }, 1500);
     } catch {
       setError("Network error — is the dashboard server running?");
-    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className={`card form-card ${locked ? "card-locked" : ""}`}>
+    <Card variant="action" className={locked ? "card-locked" : ""}>
       <h2>Create AI Emails</h2>
       <p className="muted">
         Runs only for leads with status <strong>enriched</strong> and an email.
@@ -60,8 +63,7 @@ export default function StartAiDraftButton({
       </p>
 
       <p className="stat-line">
-        Ready for AI draft (<code>enriched</code>):{" "}
-        <strong>{waitingCount}</strong> lead(s)
+        <strong>{waitingCount}</strong> lead{waitingCount !== 1 ? "s" : ""} ready for AI drafting
       </p>
 
       <StepLockNotice
@@ -73,9 +75,15 @@ export default function StartAiDraftButton({
       />
 
       {loading && (
-        <div className="banner banner-loading">
-          AI draft starting… please wait.
-        </div>
+        <WorkflowProgress
+          title="AI Draft running…"
+          activeIndex={0}
+          steps={[
+            { label: "Triggering AI draft workflow" },
+            { label: "OpenAI writing personalized emails" },
+            { label: "Drafts saved — check the Drafts page" },
+          ]}
+        />
       )}
 
       <Button
@@ -101,6 +109,6 @@ export default function StartAiDraftButton({
 
       {message && <p className="ok">{message}</p>}
       {error && <p className="error-box">{error}</p>}
-    </div>
+    </Card>
   );
 }

@@ -1,10 +1,13 @@
 import { query } from "@/lib/db";
 import type { Campaign } from "@/types";
 import CampaignsTable from "@/components/campaigns/CampaignsTable";
+import CampaignsRefresh from "@/components/campaigns/CampaignsRefresh";
 import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+
+export const metadata = { title: "Campaigns — Atrium Reach" };
 
 async function getCampaigns() {
   try {
@@ -19,10 +22,11 @@ async function getCampaigns() {
        ORDER BY id DESC
        LIMIT 50`
     );
-    return { ok: true as const, campaigns: rows };
+    const hasRunning = rows.some((c) => c.status === "running");
+    return { ok: true as const, campaigns: rows, hasRunning };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return { ok: false as const, error: message };
+    return { ok: false as const, error: message, hasRunning: false };
   }
 }
 
@@ -35,11 +39,14 @@ export default async function CampaignsPage() {
         <div>
           <p className="eyebrow">Data</p>
           <h1>Campaigns</h1>
-          <p className="muted">Search history and results — table only</p>
+          <p className="muted">Search history — showing last 50 campaigns.</p>
         </div>
-        <Link href="/find-leads" className="btn-primary-link">
-          + Find Leads
-        </Link>
+        <div className="page-head-actions">
+          <CampaignsRefresh hasInProgress={result.hasRunning} />
+          <Link href="/find-leads" className="btn-primary-link">
+            + Find Leads
+          </Link>
+        </div>
       </div>
 
       {!result.ok && (

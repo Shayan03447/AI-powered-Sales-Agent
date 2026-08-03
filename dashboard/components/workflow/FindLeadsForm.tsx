@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 
 /** Find Leads form only — no tables on this page */
 export default function FindLeadsForm() {
@@ -42,6 +43,7 @@ export default function FindLeadsForm() {
           ? `\n${String(data.detail).slice(0, 300)}`
           : "";
         setError((data.error || "Could not start search") + detail);
+        setLoading(false); // re-enable form on error only
         return;
       }
 
@@ -51,23 +53,23 @@ export default function FindLeadsForm() {
       setMessage(
         "Search started." +
           suburbNote +
-          " New campaign will appear on the Campaigns page in about 30–90 seconds."
+          " Redirecting to Campaigns…"
       );
 
+      // Keep form disabled during the redirect delay to prevent double-submit.
       setTimeout(() => {
         router.push("/campaigns");
         router.refresh();
-      }, 1500);
+      }, 1200);
     } catch {
       setError("Network error — is the dashboard server running?");
-    } finally {
-      setLoading(false);
+      setLoading(false); // re-enable form on network error
     }
   }
 
   return (
-    <form className="card form-card" onSubmit={onSubmit}>
-      <h2>Find Leads</h2>
+    <Card as="form" variant="action" onSubmit={onSubmit}>
+      <h2>New Search</h2>
       <p className="muted">
         Enter business type and city. The system will search and save results.
         Check progress on the Campaigns and Leads pages.
@@ -79,38 +81,48 @@ export default function FindLeadsForm() {
 
       {loading && (
         <div className="banner banner-loading">
-          Searching… please wait. Do not click again.
+          Search in progress… this may take a minute.
         </div>
       )}
 
       <label>
         Business type
         <input
+          name="businessType"
           value={businessType}
           onChange={(e) => setBusinessType(e.target.value)}
           placeholder="e.g. plumber"
           required
           disabled={loading}
+          autoComplete="off"
         />
       </label>
 
       <label>
         City
         <input
+          name="city"
           value={city}
           onChange={(e) => setCity(e.target.value)}
           placeholder="e.g. Sydney"
           required
           disabled={loading}
+          autoComplete="off"
         />
       </label>
 
       <label>
-        Country
+        Country code
         <input
+          name="country"
           value={country}
-          onChange={(e) => setCountry(e.target.value)}
+          onChange={(e) => setCountry(e.target.value.toUpperCase())}
           placeholder="AU"
+          required
+          minLength={2}
+          maxLength={3}
+          pattern="[A-Za-z]{2,3}"
+          title="2 or 3 letter country code, e.g. AU or USA"
           disabled={loading}
         />
       </label>
@@ -118,6 +130,7 @@ export default function FindLeadsForm() {
       <label>
         Source
         <select
+          name="source"
           value={source}
           onChange={(e) => setSource(e.target.value)}
           disabled={loading}
@@ -129,13 +142,17 @@ export default function FindLeadsForm() {
       </label>
 
       <label>
-        Max results
+        Max results (1–20 businesses)
         <input
+          name="maxResults"
           type="number"
           min={1}
           max={20}
           value={maxResults}
-          onChange={(e) => setMaxResults(Number(e.target.value) || 10)}
+          onChange={(e) => {
+            const v = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+            setMaxResults(v);
+          }}
           disabled={loading}
         />
       </label>
@@ -150,6 +167,6 @@ export default function FindLeadsForm() {
 
       {message && <p className="ok">{message}</p>}
       {error && <p className="error-box">{error}</p>}
-    </form>
+    </Card>
   );
 }

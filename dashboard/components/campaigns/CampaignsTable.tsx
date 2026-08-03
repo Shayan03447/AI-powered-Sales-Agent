@@ -1,7 +1,7 @@
 import type { Campaign } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
-import Card from "@/components/ui/Card";
 import Link from "next/link";
+import EmptyState, { CampaignIcon } from "@/components/ui/EmptyState";
 
 export default function CampaignsTable({
   campaigns,
@@ -10,17 +10,21 @@ export default function CampaignsTable({
 }) {
   if (campaigns.length === 0) {
     return (
-      <Card variant="empty">
-        <p className="muted">
-          No campaigns yet. Go to <Link href="/find-leads">Find Leads</Link> to
-          start a search.
-        </p>
-      </Card>
+      <EmptyState
+        icon={<CampaignIcon />}
+        title="No campaigns yet"
+        description="Create your first outreach campaign."
+        action={
+          <Link href="/find-leads" className="btn-primary-link">
+            Find Leads
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <div className="card table-wrap">
+    <div className="card table-wrap campaigns-table">
       <table>
         <thead>
           <tr>

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import StepLockNotice from "@/components/workflow/StepLockNotice";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import WorkflowProgress from "@/components/ui/WorkflowProgress";
 
 export default function StartSendButton({
   waitingCount,
@@ -36,31 +38,33 @@ export default function StartSendButton({
           ? `\n${String(data.detail).slice(0, 300)}`
           : "";
         setError((data.error || "Could not start send") + detail);
+        setLoading(false);
         return;
       }
 
       setMessage(data.message);
+      // Keep button disabled until refresh completes to prevent double-submit.
       setTimeout(() => {
         router.refresh();
+        setLoading(false);
       }, 1500);
     } catch {
       setError("Network error — is the dashboard server running?");
-    } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className={`card form-card ${locked ? "card-locked" : ""}`}>
+    <Card variant="action" className={locked ? "card-locked" : ""}>
       <h2>Send Approved Emails</h2>
       <p className="muted">
-        Starts WF4. Only leads with status <strong>approved</strong> and an
-        approved draft are sent via Resend (from your company domain email).
+        Sends all approved leads via your configured email domain. Only leads
+        with status <strong>approved</strong> and an approved draft are
+        processed.
       </p>
 
       <p className="stat-line">
-        Ready to send (<code>approved</code>):{" "}
-        <strong>{waitingCount}</strong> lead(s)
+        <strong>{waitingCount}</strong> lead{waitingCount !== 1 ? "s" : ""} approved and ready to send
       </p>
 
       <StepLockNotice
@@ -72,9 +76,15 @@ export default function StartSendButton({
       />
 
       {loading && (
-        <div className="banner banner-loading">
-          Send starting… please wait.
-        </div>
+        <WorkflowProgress
+          title="Send running…"
+          activeIndex={0}
+          steps={[
+            { label: "Triggering send workflow" },
+            { label: "Delivering emails via your configured domain" },
+            { label: "Status updates appear on this page" },
+          ]}
+        />
       )}
 
       <Button
@@ -98,6 +108,6 @@ export default function StartSendButton({
 
       {message && <p className="ok">{message}</p>}
       {error && <p className="error-box">{error}</p>}
-    </div>
+    </Card>
   );
 }

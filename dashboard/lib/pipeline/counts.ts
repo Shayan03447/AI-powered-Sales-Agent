@@ -5,6 +5,10 @@ export type PipelineCounts = {
   enrichedReady: number;
   pendingReview: number;
   approved: number;
+  /** Leads that have been successfully sent. */
+  sent: number;
+  /** Total leads in the database — used to distinguish "empty pipeline" from "all sent". */
+  totalLeads: number;
 };
 
 export async function getPipelineCounts(): Promise<
@@ -15,6 +19,8 @@ export async function getPipelineCounts(): Promise<
     enrichedReady: 0,
     pendingReview: 0,
     approved: 0,
+    sent: 0,
+    totalLeads: 0,
   };
 
   try {
@@ -23,6 +29,8 @@ export async function getPipelineCounts(): Promise<
       enriched_ready: string;
       pending_review: string;
       approved: string;
+      sent: string;
+      total_leads: string;
     }>(
       `SELECT
          COUNT(*) FILTER (
@@ -40,7 +48,11 @@ export async function getPipelineCounts(): Promise<
          )::text AS pending_review,
          COUNT(*) FILTER (
            WHERE status = 'approved'
-         )::text AS approved
+         )::text AS approved,
+         COUNT(*) FILTER (
+           WHERE status = 'sent'
+         )::text AS sent,
+         COUNT(*)::text AS total_leads
        FROM leads`
     );
 
@@ -52,6 +64,8 @@ export async function getPipelineCounts(): Promise<
         enrichedReady: Number(r?.enriched_ready || 0),
         pendingReview: Number(r?.pending_review || 0),
         approved: Number(r?.approved || 0),
+        sent: Number(r?.sent || 0),
+        totalLeads: Number(r?.total_leads || 0),
       },
     };
   } catch (err) {
