@@ -95,7 +95,8 @@ body {
 
 .topnav nav {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
@@ -114,8 +115,9 @@ body {
 }
 
 .nav-link.active {
-  background: var(--ink);
-  color: #fff;
+  background: rgba(15, 110, 106, 0.1);
+  color: var(--accent-deep);
+  font-weight: 600;
 }
 
 main {

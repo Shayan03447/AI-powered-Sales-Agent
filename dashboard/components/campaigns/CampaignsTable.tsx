@@ -1,5 +1,6 @@
 import type { Campaign } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
+import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export default function CampaignsTable({
@@ -9,12 +10,12 @@ export default function CampaignsTable({
 }) {
   if (campaigns.length === 0) {
     return (
-      <div className="card">
+      <Card variant="empty">
         <p className="muted">
           No campaigns yet. Go to <Link href="/find-leads">Find Leads</Link> to
           start a search.
         </p>
-      </div>
+      </Card>
     );
   }
 

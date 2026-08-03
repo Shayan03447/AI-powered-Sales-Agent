@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function LogoutButton() {
+interface Props {
+  /** Override the button's className — e.g. for the mobile drawer variant. */
+  className?: string;
+}
+
+export default function LogoutButton({ className }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +26,7 @@ export default function LogoutButton() {
   return (
     <button
       type="button"
-      className="nav-logout"
+      className={className ?? "nav-logout"}
       onClick={onLogout}
       disabled={loading}
     >

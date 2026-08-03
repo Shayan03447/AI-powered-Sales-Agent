@@ -1,15 +1,16 @@
 import type { Lead } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
+import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export default function LeadsTable({ leads }: { leads: Lead[] }) {
   if (leads.length === 0) {
     return (
-      <div className="card">
+      <Card variant="empty">
         <p className="muted">
           No leads yet. Start from <Link href="/find-leads">Find Leads</Link>.
         </p>
-      </div>
+      </Card>
     );
   }
 

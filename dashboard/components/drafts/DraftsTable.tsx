@@ -1,6 +1,7 @@
 import type { Lead } from "@/types";
 import StatusBadge from "@/components/ui/StatusBadge";
 import DraftReviewActions from "@/components/drafts/DraftReviewActions";
+import Card from "@/components/ui/Card";
 import Link from "next/link";
 
 export type DraftLead = Lead & {
@@ -12,12 +13,12 @@ export type DraftLead = Lead & {
 export default function DraftsTable({ drafts }: { drafts: DraftLead[] }) {
   if (drafts.length === 0) {
     return (
-      <div className="card">
+      <Card variant="empty">
         <p className="muted">
           No drafts yet. Go to <Link href="/ai-draft">AI Draft</Link> to create
           emails.
         </p>
-      </div>
+      </Card>
     );
   }
 

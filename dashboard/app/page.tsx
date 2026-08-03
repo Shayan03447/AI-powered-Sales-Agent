@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getPipelineCounts } from "@/lib/pipeline/counts";
 import StatusBadge from "@/components/ui/StatusBadge";
+import Card from "@/components/ui/Card";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -59,10 +60,10 @@ export default async function HomePage() {
       )}
 
       {!pipeline.ok && (
-        <div className="card error-box">
+        <Card variant="error">
           <strong>Could not read pipeline</strong>
           <p>{pipeline.error}</p>
-        </div>
+        </Card>
       )}
 
       <section className="action-grid action-grid-5">
