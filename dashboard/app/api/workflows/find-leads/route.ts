@@ -47,30 +47,23 @@ export async function POST(request: Request) {
     });
 
     if (!result.ok) {
+      console.error("[find-leads] n8n error:", result.status, result.body);
       return NextResponse.json(
-        {
-          ok: false,
-          error: `n8n WF1 (${result.mode}) returned HTTP ${result.status}`,
-          detail: result.body,
-        },
+        { ok: false, error: "Search service is currently unavailable. Please try again in a moment." },
         { status: 502 }
       );
     }
 
     const rotationNote = picked
-      ? ` Search area: ${picked.suburb} (metro rotation #${campaignCount + 1}).`
+      ? ` Searching in ${picked.suburb} (area rotation #${campaignCount + 1}).`
       : "";
 
     return NextResponse.json({
       ok: true,
-      mode: result.mode,
       suburb: picked?.suburb ?? null,
       search_query: searchQuery ?? `${businessType} in ${city}, ${country}`,
       message:
-        "WF1 started via " +
-        result.mode +
-        ". Wait, then Refresh list. Campaign should show type + city (not empty)." +
-        rotationNote,
+        `Search started.${rotationNote} Results will appear on the Campaigns and Leads pages in 1–3 minutes — use the Refresh button to check.`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

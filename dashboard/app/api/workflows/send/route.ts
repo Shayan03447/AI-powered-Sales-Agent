@@ -34,12 +34,9 @@ export async function POST(request: Request) {
     const result = await triggerWf4({ batchSize });
 
     if (!result.ok) {
+      console.error("[send] n8n error:", result.status, result.body);
       return NextResponse.json(
-        {
-          ok: false,
-          error: `n8n WF4 returned HTTP ${result.status}`,
-          detail: result.body,
-        },
+        { ok: false, error: "Email sending service is currently unavailable. Please try again in a moment." },
         { status: 502 }
       );
     }

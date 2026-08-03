@@ -14,17 +14,32 @@ export type Wf1Payload = {
   location?: string;
 };
 
+const FETCH_TIMEOUT_MS = 30_000; // 30 seconds
+
 async function postJson(
   url: string,
   body: Record<string, unknown>
 ): Promise<{ ok: boolean; status: number; body: string }> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  return { ok: res.ok, status: res.status, body: text.slice(0, 800) };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, body: text.slice(0, 800) };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { ok: false, status: 504, body: "Request timed out after 30 seconds." };
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** WF1 — Find Leads */

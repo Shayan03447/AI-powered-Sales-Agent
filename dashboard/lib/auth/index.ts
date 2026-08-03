@@ -1,7 +1,14 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
 export const SESSION_COOKIE = "atrium_session";
-const SESSION_DAYS = 7;
+
+/**
+ * How long the JWT payload stays valid (server-side check).
+ * The browser cookie itself is a session cookie — it disappears when
+ * the browser is closed, so the user must log in again on every new
+ * browser session regardless of this value.
+ */
+const SESSION_DAYS = 1;
 
 function getSecret() {
   const secret = process.env.AUTH_SECRET?.trim();
@@ -70,12 +77,21 @@ export function verifySessionToken(token: string | undefined): {
   }
 }
 
-export function sessionCookieOptions(maxAgeSeconds = SESSION_DAYS * 24 * 60 * 60) {
+/**
+ * Returns cookie options for the session cookie.
+ * No `maxAge` or `expires` → browser session cookie.
+ * The cookie is automatically deleted when the browser is closed,
+ * so the user is always prompted to log in on a new browser session.
+ *
+ * Pass maxAgeSeconds=0 on logout to explicitly clear the cookie.
+ */
+export function sessionCookieOptions(maxAgeSeconds?: number) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
-    maxAge: maxAgeSeconds,
+    // Only set maxAge when explicitly provided (e.g. logout sets it to 0).
+    ...(maxAgeSeconds !== undefined ? { maxAge: maxAgeSeconds } : {}),
   };
 }

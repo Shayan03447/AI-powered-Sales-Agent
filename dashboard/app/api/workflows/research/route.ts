@@ -28,12 +28,9 @@ export async function POST(request: Request) {
     const result = await triggerWf2({ batchSize });
 
     if (!result.ok) {
+      console.error("[research] n8n error:", result.status, result.body);
       return NextResponse.json(
-        {
-          ok: false,
-          error: `n8n WF2 returned HTTP ${result.status}`,
-          detail: result.body,
-        },
+        { ok: false, error: "Research service is currently unavailable. Please try again in a moment." },
         { status: 502 }
       );
     }

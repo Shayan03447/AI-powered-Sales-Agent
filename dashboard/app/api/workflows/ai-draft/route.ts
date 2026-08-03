@@ -28,12 +28,9 @@ export async function POST(request: Request) {
     const result = await triggerWf3({ batchSize });
 
     if (!result.ok) {
+      console.error("[ai-draft] n8n error:", result.status, result.body);
       return NextResponse.json(
-        {
-          ok: false,
-          error: `n8n WF3 returned HTTP ${result.status}`,
-          detail: result.body,
-        },
+        { ok: false, error: "AI drafting service is currently unavailable. Please try again in a moment." },
         { status: 502 }
       );
     }

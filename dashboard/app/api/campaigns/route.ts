@@ -9,7 +9,8 @@ export async function GET() {
       `SELECT id, business_type, city, status,
               leads_found, leads_inserted, created_at
        FROM campaigns
-       ORDER BY id DESC`
+       ORDER BY id DESC
+       LIMIT 200`
     );
     return NextResponse.json({ ok: true, campaigns: rows });
   } catch (err) {

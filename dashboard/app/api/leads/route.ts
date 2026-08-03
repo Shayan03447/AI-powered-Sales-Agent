@@ -10,12 +10,20 @@ export async function GET(request: Request) {
 
     let rows: Lead[];
     if (campaignId) {
+      const id = Number(campaignId);
+      if (!Number.isFinite(id) || id <= 0) {
+        return NextResponse.json(
+          { ok: false, error: "Invalid campaign_id" },
+          { status: 400 }
+        );
+      }
       rows = await query<Lead>(
         `SELECT id, business_name, city, status, website_url, campaign_id
          FROM leads
          WHERE campaign_id = $1
-         ORDER BY id DESC`,
-        [Number(campaignId)]
+         ORDER BY id DESC
+         LIMIT 500`,
+        [id]
       );
     } else {
       rows = await query<Lead>(
