@@ -62,8 +62,12 @@ export async function verifySessionTokenEdge(
     if (diff !== 0) return false;
 
     const json = new TextDecoder().decode(base64UrlToBytes(payload));
-    const data = JSON.parse(json) as { u?: string; exp?: number };
+    const data = JSON.parse(json) as { u?: string; exp?: number; nonce?: string };
     if (!data.u || !data.exp || Date.now() > data.exp) return false;
+
+    // Reject tokens from a previous server boot.
+    const bootNonce = process.env.NEXT_PUBLIC_SERVER_BOOT_NONCE ?? "";
+    if (bootNonce && data.nonce !== bootNonce) return false;
 
     return true;
   } catch {

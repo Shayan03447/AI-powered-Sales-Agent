@@ -39,10 +39,7 @@ export default function FindLeadsForm() {
       const data = await res.json();
 
       if (!data.ok) {
-        const detail = data.detail
-          ? `\n${String(data.detail).slice(0, 300)}`
-          : "";
-        setError((data.error || "Could not start search") + detail);
+        setError(data.error || "Could not start search");
         setLoading(false); // re-enable form on error only
         return;
       }

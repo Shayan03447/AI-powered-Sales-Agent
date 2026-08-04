@@ -1,183 +1,303 @@
 # AI-Powered Sales Agent
 
-Autonomous outbound sales system for digital marketing agencies. It finds local businesses, researches their websites, audits digital presence, drafts personalized emails with AI, and sends only after human approval.
+An AI-assisted outbound sales system designed for digital marketing agencies that need to research, qualify, personalize, and manage outreach at scale without losing human control over the final message.
 
-**Stack:** n8n (self-hosted) · PostgreSQL · Next.js dashboard · ScraperAPI · Google PageSpeed Insights · OpenAI · SMTP
+The system finds local businesses, researches their websites, identifies digital improvement opportunities, generates personalized email drafts with AI, and sends only after human approval.
 
----
+**Core stack:** n8n workflows, PostgreSQL, Next.js 15 dashboard, OpenAI, ScraperAPI, Google PageSpeed Insights, Resend API.
 
-## Table of contents
-
-1. [What it does](#what-it-does)
-2. [Architecture](#architecture)
-3. [Lead status pipeline](#lead-status-pipeline)
-4. [Repository structure](#repository-structure)
-5. [Prerequisites](#prerequisites)
-6. [Quick start](#quick-start)
-7. [Environment variables](#environment-variables)
-8. [n8n workflows](#n8n-workflows)
-9. [Dashboard](#dashboard)
-10. [Database](#database)
-11. [End-to-end test flow](#end-to-end-test-flow)
-12. [Common errors](#common-errors)
-13. [Documentation](#documentation)
 
 ---
 
-## What it does
+## Business Problem
 
-| Step | Action | Who runs it |
-|------|--------|-------------|
-| 1 | Find businesses (Google Maps / Yelp) by type + city | WF1 |
-| 2 | Crawl website, extract email/socials, PageSpeed scores | WF2 |
-| 3 | Audit findings + AI personalized email draft | WF3 |
-| 4 | Human approve / edit / reject | Dashboard |
-| 5 | Send approved emails via SMTP | WF4 |
+Growing sales teams usually do not struggle because they have no leads.
+
+They struggle because every lead needs time:
+
+- Finding the right businesses
+- Checking whether the company is a good fit
+- Visiting websites manually
+- Looking for contact details
+- Understanding what problem the prospect may have
+- Writing outreach that does not sound generic
+- Tracking which lead is at which stage
+
+When this work is done manually, salespeople spend too much time on research and administration instead of conversations, relationships, and closing deals.
+
+The result is a common operational bottleneck:
+
+- Outreach becomes generic
+- Good leads are delayed or missed
+- Follow-up becomes inconsistent
+- More people are needed just to maintain the same process
+- Sales operations become harder to track as the pipeline grows
+
+This project was built around one question:
+
+> How can AI remove repetitive sales operations work while keeping humans in control of quality and brand reputation?
+
+---
+
+## Solution Overview
+
+This project is an AI-powered sales agent that acts as the first layer of an outbound sales process.
+
+It does not try to replace the sales team. It handles the repetitive research and drafting work so humans can focus on the parts that require judgment.
+
+The system can:
+
+- Discover local businesses from sources like Google Maps and Yelp
+- Research each company website
+- Extract contact and business information
+- Check website performance and digital presence
+- Identify useful pain points for outreach
+- Generate personalized email drafts using AI
+- Route drafts to a dashboard for human review
+- Send approved emails through Resend
+- Track every lead through a clear pipeline status
 
 Human review is required before any email is sent.
 
 ---
 
-## Architecture
+## How the System Works
 
-Workflows do **not** call each other. They share state through PostgreSQL status flags.
+| Step | What Happens | System Component |
+|------|--------------|------------------|
+| 1 | Find businesses by niche, city, country, and source | Workflow 1 - Lead Generation |
+| 2 | Save campaign and lead records in PostgreSQL | Workflow 1 + Database |
+| 3 | Crawl websites, extract contact data, and collect PageSpeed signals | Workflow 2 - Enrichment |
+| 4 | Analyze findings and create an AI-personalized email draft | Workflow 3 - AI Audit & Draft |
+| 5 | Review, edit, approve, or reject the draft | Next.js Dashboard |
+| 6 | Send only approved emails through Resend | WF4 - Email Send |
+| 7 | Log workflow results, errors, and send outcomes | PostgreSQL |
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                    PostgreSQL (shared state)             │
-└───────────┬────────────┬────────────┬───────────┬────────┘
-            │            │            │           │
-            ▼            ▼            ▼           ▼
-         ┌─────┐      ┌─────┐      ┌─────┐     ┌─────┐
-         │ WF1 │      │ WF2 │      │ WF3 │     │ WF4 │
-         │Find │      │Enrich│     │Audit│     │Send │
-         └─────┘      └─────┘      └─────┘     └─────┘
-            ▲            ▲            ▲           ▲
-            └────────────┴──── dashboard webhooks ┘
-```
-
-**Benefits**
-- Fault isolation — one workflow crash does not stop others
-- Resumable — stuck leads recover from DB status
-- Observable — every lead has a clear pipeline stage
+The workflow is designed around pipeline state. Each lead moves through statuses such as `new`, `enriched`, `pending_review`, `approved`, and `sent`.
 
 ---
 
-## Lead status pipeline
+## Architecture
 
+The system uses PostgreSQL as the shared state layer. n8n workflows do not depend on direct workflow-to-workflow calls. Instead, they read from and write to the database based on lead status.
+
+```text
+                       PostgreSQL
+                    Shared Pipeline State
+        campaigns | leads | email_drafts | email_logs | workflow_logs
+                                  |
+        ---------------------------------------------------------------
+        |                 |                    |                    |
+        v                 v                    v                    v
+   WF1 Lead Gen      WF2 Enrichment      WF3 AI Draft        WF4 Email Send
+ Google/Yelp APIs    Web + PageSpeed       OpenAI             Resend API
+        |                 |                    |                    |
+        ---------------------------------------------------------------
+                                  |
+                                  v
+                         Next.js Dashboard
+                   Human review, control, visibility
 ```
+
+This architecture keeps the system easier to operate:
+
+- If one workflow fails, the others can continue
+- Stuck leads can be recovered by status
+- Every lead has a visible stage
+- Dashboard actions can trigger n8n webhooks
+- Workflow behavior can be observed through database logs
+
+---
+
+## Lead Status Pipeline
+
+```text
 new
-  → enriching → enriched | no_email | enrich_failed | no_website
-  → auditing  → pending_review | audit_failed
-  → approved | rejected
-  → sent | send_failed
+  -> enriching
+  -> enriched | no_email | no_website | enrich_failed
+  -> auditing
+  -> pending_review | audit_failed
+  -> approved | rejected
+  -> sending
+  -> sent | send_failed
 ```
 
 | Status | Meaning |
 |--------|---------|
-| `new` | Discovered; waiting for research |
-| `enriched` | Email + enrichment data ready |
-| `pending_review` | AI draft ready; needs human review |
-| `approved` | Ready for WF4 send |
-| `sent` | Email delivered |
-| `rejected` | Human rejected; do not send |
-| `*_failed` | Terminal or retryable failure (see `failure_reason`) |
+| `new` | Lead discovered and waiting for research |
+| `enriching` | Website/contact enrichment is in progress |
+| `enriched` | Lead has research data and is ready for AI drafting |
+| `pending_review` | AI draft is ready for human review |
+| `approved` | Human approved the message for sending |
+| `rejected` | Human rejected the draft; do not send |
+| `sending` | Email send is in progress |
+| `sent` | Email was delivered through Resend |
+| `*_failed` | Workflow failed and stored a failure reason |
 
 ---
 
-## Repository structure
+## Key Design Decisions
 
-```
+### 1. Human approval before sending
+
+AI is useful for research, summarization, and drafting, but outbound messaging affects brand reputation. The system intentionally keeps humans in the approval loop before any email is sent.
+
+### 2. Database-driven workflow orchestration
+
+Instead of chaining every workflow directly, PostgreSQL acts as the source of truth. This makes the pipeline more recoverable and easier to debug.
+
+### 3. Smaller isolated workflows
+
+Each n8n workflow has one responsibility:
+
+- Find leads
+- Enrich leads
+- Generate AI drafts
+- Send approved emails
+
+This reduces blast radius. A failure in enrichment does not stop review or sending for already approved leads.
+
+### 4. Status-based recovery
+
+Leads are not treated as temporary workflow items. They are persistent records with statuses, retry counts, timestamps, and failure reasons.
+
+### 5. Business-first AI usage
+
+The goal is not to use AI everywhere. The goal is to apply AI where it removes a real business bottleneck: manual research, weak personalization, and slow outreach preparation.
+
+---
+
+## Potential Business Impact
+
+This system is designed to support outcomes such as:
+
+- Faster lead research
+- More consistent outbound preparation
+- Better personalization based on real website findings
+- Less manual administrative work for sales teams
+- Better visibility into lead stages and workflow failures
+- Lower operational load as campaigns scale
+- Safer AI adoption through human approval
+
+No fixed ROI is assumed in this README because results depend on offer, market, data quality, email deliverability, and sales process.
+
+---
+
+## Technical Stack
+
+| Layer | Technology | Role |
+|-------|------------|------|
+| Workflow automation | n8n | Runs lead generation, enrichment, AI drafting, and sending workflows |
+| Database | PostgreSQL | Shared state, lead pipeline, campaign records, logs |
+| Dashboard | Next.js 15, React 19, TypeScript | Human review, campaign visibility, workflow controls |
+| AI | OpenAI | Audit insights and personalized email drafting |
+| Web data | ScraperAPI | Website crawling and data extraction support |
+| Performance signals | Google PageSpeed Insights | Website performance and digital presence signals |
+| Email delivery | Resend API | Sends approved outbound emails |
+| Database access | `pg` | PostgreSQL connection from the dashboard |
+
+---
+
+## Repository Structure
+
+```text
 AI-powered-Sales-Agent/
-├── database/
-│   ├── schema.sql                 # Full PostgreSQL schema
-│   └── migrate_wf3_columns.sql    # WF3 column migration (if needed)
-├── dashboard/                     # Next.js client UI + API
-│   ├── app/                       # Pages + API routes
-│   ├── components/
-│   ├── lib/db/                    # Postgres pool
-│   ├── lib/n8n/                   # Webhook triggers
-│   ├── .env.example
-│   └── PART_*_TEST.md             # Step-by-step test guides
-├── n8n/
-│   ├── PD — Lead Generation & Data Storage.json   # WF1
-│   ├── PD - Data Enrichment & Web Crawling.json   # WF2
-│   ├── WF3 — Audit & Email Draft.json             # WF3
-│   └── WF4 — Email Send.json                      # WF4
-└── helping_materials/
-    ├── SYSTEM_ARCHITECTURE.md
-    ├── FUNCTIONAL_REQUIREMENTS.md
-    └── CLIENT_DASHBOARD_BUILD_PLAN.md
++-- database/
+|   +-- schema.sql
+|   +-- migrate_wf3_columns.sql
++-- dashboard/
+|   +-- app/
+|   +-- components/
+|   +-- lib/
+|   |   +-- auth/
+|   |   +-- db/
+|   |   +-- n8n/
+|   +-- .env.example
+|   +-- PART_*_TEST.md
++-- n8n/
+|   +-- PD - Lead Generation & Data Storage*.json
+|   +-- PD - Data Enrichment & Web Crawling*.json
+|   +-- WF3 - Audit & Email Draft*.json
+|   +-- WF4 - Email Send.json
+
 ```
 
 ---
 
 ## Prerequisites
 
-- **Node.js** 18+ (LTS recommended)
-- **PostgreSQL** 14+
-- **n8n** self-hosted (Docker or npm)
-- API keys / accounts:
-  - OpenAI (`OPENAI_API_KEY`)
-  - ScraperAPI (`SCRAPERAPI_KEY`)
-  - Google PageSpeed Insights key (`GOOGLE_PSI_KEY` / `GOOGLE_API_KEY`)
-  - Yelp / Google Maps credentials used by WF1 (as configured in n8n)
-  - SMTP credentials for WF4
+- Node.js 18.18+
+- PostgreSQL 14+
+- n8n self-hosted or n8n instance with workflow import support
+- API keys or credentials for:
+  - OpenAI
+  - ScraperAPI
+  - Google PageSpeed Insights / Google API
+  - Google Maps or Yelp source used by WF1
+  - Resend API
 
 ---
 
-## Quick start
+## Quick Start
 
 ### 1. Database
 
-```bash
-# Create DB (name may be sales_agent or sale_agent — match your .env)
-createdb sales_agent
-
-psql -U postgres -d sales_agent -f database/schema.sql
-```
-
-If WF3 fails on missing columns:
+Create a PostgreSQL database. Use the same name in `dashboard/.env.local`.
 
 ```bash
-psql -U postgres -d sales_agent -f database/migrate_wf3_columns.sql
+createdb sale_agent
+psql -U postgres -d sale_agent -f database/schema.sql
 ```
 
-Confirm JSON columns are `jsonb` (not `text`):
+If WF3 needs the extra audit columns, run:
+
+```bash
+psql -U postgres -d sale_agent -f database/migrate_wf3_columns.sql
+```
+
+Confirm JSON columns are correctly typed:
 
 ```sql
 SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = 'leads'
   AND column_name IN (
-    'performance_json', 'pain_points',
-    'crawl_metadata', 'scraped_html'
+    'performance_json',
+    'pain_points',
+    'crawl_metadata',
+    'scraped_html'
   );
 ```
 
-Expected: first three → `jsonb`, `scraped_html` → `text`.
+Expected:
+
+- `performance_json`, `pain_points`, and `crawl_metadata` should be `jsonb`
+- `scraped_html` should be `text`
 
 ### 2. n8n
 
-1. Start n8n (default: `http://localhost:5678`)
-2. Import all JSON files from `n8n/`
-3. Configure **Postgres** credentials on all Postgres nodes
-4. Set n8n environment variables (see below)
-5. Add webhooks (if not already present) and **Activate** each workflow:
+1. Start n8n. Default local URL: `http://localhost:5678`
+2. Import all workflow JSON files from `n8n/`
+3. Configure PostgreSQL credentials on all Postgres nodes
+4. Set required n8n environment variables
+5. Activate workflows
+6. Copy production webhook URLs into the dashboard `.env.local`
 
-| Workflow | Suggested webhook path |
-|----------|------------------------|
-| WF1 Find Leads | `wf1-find-leads` |
-| WF2 Research | `wf2-research` |
-| WF3 AI Draft | `wf3-ai-draft` |
-| WF4 Send | `wf4-send` (if used from dashboard) |
+Suggested webhook paths:
+
+| Workflow | Webhook Path |
+|----------|--------------|
+| WF1 - Lead Generation | `wf1-find-leads` |
+| WF2 - Research | `wf2-research` |
+| WF3 - AI Draft | `wf3-ai-draft` |
+| WF4 - Send | `wf4-send` |
 
 ### 3. Dashboard
 
 ```bash
 cd dashboard
 cp .env.example .env.local
-# Edit .env.local with DB + webhook URLs
+# Edit .env.local with PostgreSQL, auth, and n8n webhook values
 
 npm install
 npm run dev
@@ -187,123 +307,138 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Environment variables
+## Environment Variables
 
 ### Dashboard (`dashboard/.env.local`)
 
 ```env
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=sales_agent
+POSTGRES_DB=sale_agent
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_password_here
+POSTGRES_PASSWORD=your_strong_database_password_here
 
 N8N_WF1_WEBHOOK_URL=http://localhost:5678/webhook/wf1-find-leads
+N8N_WF1_FORM_URL=
 N8N_WF2_WEBHOOK_URL=http://localhost:5678/webhook/wf2-research
 N8N_WF3_WEBHOOK_URL=http://localhost:5678/webhook/wf3-ai-draft
-# Optional:
-# N8N_WF1_FORM_URL=
-# N8N_WF4_WEBHOOK_URL=http://localhost:5678/webhook/wf4-send
+N8N_WF4_WEBHOOK_URL=http://localhost:5678/webhook/wf4-send
+
+AUTH_USERNAME=your_admin_username
+AUTH_PASSWORD=your_strong_password_here
+AUTH_SECRET=generate_with_openssl_rand_hex_32
 ```
 
-Restart `npm run dev` after changing env values.
+Restart the dashboard after changing environment variables.
 
-### n8n (instance env / variables)
+### n8n Instance Variables
 
-| Variable | Used by | Required |
+| Variable | Used By | Required |
 |----------|---------|----------|
 | `OPENAI_API_KEY` | WF3 | Yes |
-| `SCRAPERAPI_KEY` (or `SCRAPER_API_KEY`) | WF2, WF3 | Yes for crawl / social |
-| `GOOGLE_PSI_KEY` (or `GOOGLE_API_KEY`) | WF2 | Yes for PageSpeed |
-| `AGENCY_NAME` | WF3 email sign-off | Optional |
-| `CALENDAR_LINK` | WF3 CTA | Optional |
-
-SMTP credentials are configured in WF4 email/SMTP nodes.
+| `SCRAPERAPI_KEY` or `SCRAPER_API_KEY` | WF2, WF3 | Yes |
+| `GOOGLE_PSI_KEY` or `GOOGLE_API_KEY` | WF2 | Yes |
+| `RESEND_API_KEY` | WF4 | Yes |
+| `RESEND_FROM_EMAIL` | WF4 | Yes for production sending |
+| `RESEND_FROM_NAME` | WF4 | Optional |
+| `AGENCY_NAME` | WF3, WF4 fallback | Optional |
+| `CALENDAR_LINK` | WF3 | Optional |
 
 ---
 
-## n8n workflows
+## n8n Workflows
 
-### WF1 — Lead Generation & Data Storage
+### WF1 - Lead Generation & Data Storage
 
-- **Input:** business type + city (+ country / source / max results)
-- **Does:** searches directories, dedupes, inserts leads
-- **Output status:** `new` (or `no_website`)
-- **Creates:** `campaigns` row + `leads` rows
+- Input: business type, city, country, source, max results
+- Searches local business sources such as Google Maps or Yelp
+- Creates a campaign record
+- Deduplicates and inserts leads
+- Output status: `new` or `no_website`
 
-### WF2 — Data Enrichment & Web Crawling
+### WF2 - Data Enrichment & Web Crawling
 
-- **Picks:** `status = 'new'` with website
-- **Does:** scrape site, extract email/socials, PageSpeed, pain points
-- **Output status:** `enriched` | `no_email` | `enrich_failed`
+- Picks leads with `status = 'new'`
+- Crawls business websites
+- Extracts email and social/contact signals
+- Collects PageSpeed and website performance data
+- Output status: `enriched`, `no_email`, `no_website`, or `enrich_failed`
 
-### WF3 — Audit & Email Draft
+### WF3 - AI Audit & Email Draft
 
-- **Picks:** `status = 'enriched'` with non-empty email
-- **Does:** social scrape (optional), compile audit evidence, OpenAI draft
-- **Output status:** `pending_review` | `audit_failed` (or retry → `enriched`)
-- **Writes:** `email_drafts` + lead audit fields
+- Picks leads with `status = 'enriched'` and a valid email
+- Compiles research evidence
+- Uses AI to create an audit summary and personalized email draft
+- Writes to `email_drafts`
+- Output status: `pending_review` or `audit_failed`
 
-### WF4 — Email Send
+### WF4 - Email Send
 
-- **Picks:** `status = 'approved'`
-- **Does:** send via SMTP, log result
-- **Output status:** `sent` | `send_failed`
+- Picks leads with `status = 'approved'`
+- Validates send readiness
+- Sends through the Resend API
+- Writes to `email_logs`
+- Output status: `sent` or `send_failed`
 
-Each run can also write to `workflow_logs`.
+Each workflow can also write execution details to `workflow_logs`.
 
 ---
 
 ## Dashboard
 
-Next.js App Router UI. It reads PostgreSQL and triggers n8n via webhooks.
+The dashboard is a Next.js App Router application that reads from PostgreSQL and triggers n8n workflows through webhooks.
 
 | Route | Purpose |
 |-------|---------|
-| `/find-leads` | Start WF1 (type + city) |
-| `/research` | Start WF2 |
-| `/ai-draft` | Start WF3 |
-| `/leads` | Lead list + statuses |
-| `/campaigns` | Campaign list |
-| `/drafts` | Pending AI drafts |
-| `/review` | Approve / edit / reject |
-| `/send` | Trigger / view send results |
+| `/find-leads` | Start WF1 lead discovery |
+| `/research` | Start WF2 enrichment |
+| `/ai-draft` | Start WF3 AI draft generation |
+| `/leads` | View leads and statuses |
+| `/campaigns` | View campaigns |
+| `/drafts` | View AI-generated drafts |
+| `/review` | Approve, edit, or reject drafts |
+| `/send` | Trigger or view send results |
 
-**Client flow (intended):**
+Intended user flow:
 
-1. Find Leads → see leads  
-2. Research → see emails / scores  
-3. AI Draft → see drafts  
-4. Approve / Edit / Reject  
-5. Send approved  
+1. Find leads
+2. Research leads
+3. Generate AI drafts
+4. Review, edit, approve, or reject
+5. Send approved messages
+6. Monitor results and logs
 
 ---
 
 ## Database
 
-Main tables (see `database/schema.sql`):
+Main tables:
 
 | Table | Role |
 |-------|------|
-| `campaigns` | Search runs created by WF1 |
-| `leads` | Central pipeline + enrichment + audit fields |
-| `email_drafts` | Draft subject/body for review |
-| `email_logs` | Send attempts (WF4) |
-| `workflow_logs` | Per-run summaries |
+| `campaigns` | Search runs and campaign metadata |
+| `leads` | Central lead pipeline and enrichment/audit fields |
+| `email_drafts` | AI-generated drafts and review state |
+| `email_logs` | Email send attempts and provider responses |
+| `workflow_logs` | Workflow execution summaries |
 
 Useful checks:
 
 ```sql
 -- Pipeline counts
-SELECT status, COUNT(*) FROM leads GROUP BY status ORDER BY status;
+SELECT status, COUNT(*)
+FROM leads
+GROUP BY status
+ORDER BY status;
 
--- Ready for WF3
+-- Leads ready for AI drafting
 SELECT id, business_name, email
 FROM leads
 WHERE status = 'enriched'
-  AND email IS NOT NULL AND TRIM(email) <> '';
+  AND email IS NOT NULL
+  AND TRIM(email) <> '';
 
--- Ready for review
+-- Drafts ready for review
 SELECT id, business_name, email_subject, status
 FROM leads
 WHERE status = 'pending_review';
@@ -311,34 +446,32 @@ WHERE status = 'pending_review';
 
 ---
 
-## End-to-end test flow
+## Testing Flow
 
-1. **DB connected** — dashboard home / leads load  
-2. **WF1** — Find Leads → leads appear as `new`  
-3. **WF2** — Research → `enriched` (with email) or `no_email`  
-4. **WF3** — AI Draft → `pending_review` + row in `email_drafts`  
-5. **Review** — approve one lead → `approved`  
-6. **WF4** — Send → `sent` + `email_logs` row  
+1. Confirm dashboard can connect to PostgreSQL
+2. Run WF1 and verify new leads appear
+3. Run WF2 and verify enrichment fields update
+4. Run WF3 and verify `pending_review` leads and `email_drafts`
+5. Approve or reject a draft from the dashboard
+6. Run WF4 and verify `sent` status plus `email_logs`
 
-Per-part checklists live in:
-
-- `dashboard/PART_0_TEST.md` … `PART_4_TEST.md`
-- `dashboard/WF1_WEBHOOK_FIX.md`
+Additional step-by-step test files live in `dashboard/PART_*_TEST.md`.
 
 ---
 
-## Common errors
+## Common Errors
 
-| Symptom | Likely cause | What to do |
+| Symptom | Likely Cause | What To Do |
 |---------|--------------|------------|
-| `COALESCE types text and jsonb cannot be matched` | JSON column stored as `text` | Alter to `jsonb`, or cast in SQL (`col::jsonb`) |
-| `invalid input syntax for type json` / Token "Sydney" | Non-JSON text in a JSON column | Clean bad rows; do **not** cast `scraped_html` to jsonb |
-| `A 'json' property isn't an object` | Code node **Each Item** returns an array | Return `{ json: {...} }` not `[{ json: {...} }]` |
-| `Request failed with status code 429` | OpenAI rate limit / quota | Check billing/usage; wait; keep `gpt-4o-mini` |
-| `Missing OPENAI_API_KEY` | Key not in n8n env | Set variable and restart n8n |
-| Empty WF3 run | No `enriched` leads with email | Finish WF2 first |
-| Stuck `auditing` | Mid-run crash | Wait for 20‑min recovery, or reset status to `enriched` |
-| Dashboard webhook 404 / error | Wrong URL or workflow inactive | Activate WF, copy Production webhook URL into `.env.local` |
+| `COALESCE types text and jsonb cannot be matched` | JSON column stored as `text` | Alter to `jsonb` or cast safely |
+| `invalid input syntax for type json` | Non-JSON text in JSON column | Clean bad rows; do not cast `scraped_html` to `jsonb` |
+| `A 'json' property isn't an object` | n8n Code node returned an array incorrectly | Return `{ json: {...} }` for each item |
+| `Request failed with status code 429` | OpenAI rate limit or quota issue | Check billing, usage, and retry later |
+| `Missing OPENAI_API_KEY` | n8n environment variable missing | Set the variable and restart n8n |
+| Empty WF3 run | No enriched leads with email | Complete WF2 first |
+| Stuck `auditing` or `sending` | Workflow crashed mid-run | Use recovery logic or reset status carefully |
+| Dashboard webhook error | Wrong URL or inactive n8n workflow | Activate workflow and update `.env.local` |
+| Resend send failed | Missing/invalid Resend key or sender | Check `RESEND_API_KEY` and verified sender domain |
 
 ---
 
@@ -346,14 +479,24 @@ Per-part checklists live in:
 
 | File | Contents |
 |------|----------|
-| `helping_materials/SYSTEM_ARCHITECTURE.md` | Full HLD, schemas, workflow design |
-| `helping_materials/FUNCTIONAL_REQUIREMENTS.md` | FRD / business rules |
-| `helping_materials/CLIENT_DASHBOARD_BUILD_PLAN.md` | Dashboard build order |
+| `helping_materials/SYSTEM_ARCHITECTURE.md` | Full architecture and workflow design |
+| `helping_materials/FUNCTIONAL_REQUIREMENTS.md` | Functional requirements and business rules |
+| `helping_materials/DASHBOARD_NEXTJS_ARCHITECTURE.md` | Dashboard architecture |
+| `helping_materials/ATRIUM_REACH_DESIGN_SYSTEM.md` | UI and design system notes |
 | `dashboard/STRUCTURE.md` | Dashboard folder map |
-| `dashboard/PART_*_TEST.md` | Part-by-part test plans |
+| `dashboard/PART_*_TEST.md` | Part-by-part testing checklists |
 
 ---
 
-## License / notes
+## Notes
 
-Internal project for **Atrium Solution**. Keep secrets out of git (`.env.local`, API keys, SMTP passwords). Never commit live credentials.
+This is an internal project for Atrium Solution.
+
+Keep secrets out of git:
+
+- Do not commit `.env.local`
+- Do not commit API keys
+- Do not commit Resend credentials
+- Do not commit live database credentials
+
+The system is designed for responsible AI-assisted outbound. Human approval is intentionally part of the workflow before any prospect email is sent.

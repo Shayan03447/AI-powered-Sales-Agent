@@ -34,10 +34,7 @@ export default function StartAiDraftButton({
       const data = await res.json();
 
       if (!data.ok) {
-        const detail = data.detail
-          ? `\n${String(data.detail).slice(0, 300)}`
-          : "";
-        setError((data.error || "Could not start AI draft") + detail);
+        setError(data.error || "Could not start AI draft");
         setLoading(false);
         return;
       }

@@ -3,6 +3,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 export const SESSION_COOKIE = "atrium_session";
 
 /**
+ * Boot nonce set in next.config.ts at server startup.
+ * Changes on every restart → all previously issued tokens become invalid.
+ */
+const SERVER_BOOT_NONCE = process.env.NEXT_PUBLIC_SERVER_BOOT_NONCE ?? "";
+
+/**
  * How long the JWT payload stays valid (server-side check).
  * The browser cookie itself is a session cookie — it disappears when
  * the browser is closed, so the user must log in again on every new
@@ -33,7 +39,7 @@ export function getAdminCredentials() {
 export function createSessionToken(username: string): string {
   const exp = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
   const payload = Buffer.from(
-    JSON.stringify({ u: username, exp }),
+    JSON.stringify({ u: username, exp, nonce: SERVER_BOOT_NONCE }),
     "utf8"
   ).toString("base64url");
   const sig = createHmac("sha256", getSecret())
@@ -65,9 +71,14 @@ export function verifySessionToken(token: string | undefined): {
 
     const data = JSON.parse(
       Buffer.from(payload, "base64url").toString("utf8")
-    ) as { u?: string; exp?: number };
+    ) as { u?: string; exp?: number; nonce?: string };
 
     if (!data.u || !data.exp || Date.now() > data.exp) {
+      return { ok: false };
+    }
+
+    // Reject tokens issued before this server boot.
+    if (data.nonce !== SERVER_BOOT_NONCE) {
       return { ok: false };
     }
 

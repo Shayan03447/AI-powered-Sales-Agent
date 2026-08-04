@@ -34,10 +34,7 @@ export default function StartResearchButton({
       const data = await res.json();
 
       if (!data.ok) {
-        const detail = data.detail
-          ? `\n${String(data.detail).slice(0, 300)}`
-          : "";
-        setError((data.error || "Could not start research") + detail);
+        setError(data.error || "Could not start research");
         setLoading(false);
         return;
       }
